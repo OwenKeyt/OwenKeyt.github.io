@@ -8,8 +8,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 
-<!-- vis-network: same lib pyvis uses, so the visual feels native to the original notebook -->
+<!-- vis-network: same lib pyvis wraps -->
 <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+
+<!-- Pyodide: real CPython compiled to WebAssembly. Runs the original notebook code. -->
+<script src="https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.js"></script>
 
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -22,11 +25,12 @@
   }
   body { padding: 60px 48px 100px; max-width: 1380px; margin: 0 auto; position: relative; }
 
-  /* ── ambient starfield (canvas) ─────────────────── */
+  /* ── ambient starfield ───────────────────────────── */
   #bgStars { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
   .content { position: relative; z-index: 1; }
 
-  /* ── header ─────────────────────────────────────── */
+  /* ── header ──────────────────────────────────────── */
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 56px; flex-wrap: wrap; gap: 12px; }
   .back-link {
     display: inline-flex; align-items: center; gap: 10px;
     color: rgba(200, 210, 240, 0.45);
@@ -37,9 +41,28 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 3px;
     transition: all 0.25s;
-    margin-bottom: 56px;
   }
   .back-link:hover { color: rgba(232, 236, 248, 0.92); border-color: rgba(127, 179, 245, 0.4); background: rgba(127, 179, 245, 0.04); }
+
+  .ext-links { display: flex; gap: 10px; flex-wrap: wrap; }
+  .ext-link {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    text-decoration: none;
+    border-radius: 3px;
+    transition: all 0.25s;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .ext-link.colab {
+    color: #f9ab00;
+    border-color: rgba(249, 171, 0, 0.3);
+    background: rgba(249, 171, 0, 0.06);
+  }
+  .ext-link.colab:hover { background: rgba(249, 171, 0, 0.12); border-color: rgba(249, 171, 0, 0.55); }
+  .ext-link.gh { color: rgba(200, 210, 240, 0.55); }
+  .ext-link.gh:hover { color: rgba(232, 236, 248, 0.92); border-color: rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.03); }
 
   .header { margin-bottom: 64px; max-width: 820px; }
   .eyebrow {
@@ -76,10 +99,7 @@
     color: rgba(200, 215, 245, 0.6);
     max-width: 720px;
   }
-  .meta-tags {
-    display: flex; flex-wrap: wrap; gap: 8px;
-    margin-top: 24px;
-  }
+  .meta-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
   .meta-tag {
     font-family: 'Space Mono', monospace;
     font-size: 10px; letter-spacing: 0.08em;
@@ -89,8 +109,57 @@
     color: #7fb3f5;
     border-radius: 2px;
   }
+  .meta-tag.python {
+    color: #ffd866;
+    background: rgba(255, 216, 102, 0.05);
+    border-color: rgba(255, 216, 102, 0.25);
+  }
 
-  /* ── layout ─────────────────────────────────────── */
+  /* ── pyodide load banner ─────────────────────────── */
+  .py-banner {
+    margin-bottom: 28px;
+    padding: 16px 22px;
+    border: 1px solid rgba(255, 216, 102, 0.18);
+    background: linear-gradient(135deg, rgba(255, 216, 102, 0.04), rgba(127, 179, 245, 0.04));
+    border-radius: 4px;
+    display: flex; align-items: center; gap: 18px;
+    transition: all 0.4s;
+  }
+  .py-banner.ready { border-color: rgba(168, 230, 207, 0.25); background: linear-gradient(135deg, rgba(168, 230, 207, 0.04), rgba(127, 179, 245, 0.04)); }
+  .py-banner.error { border-color: rgba(255, 100, 100, 0.3); background: rgba(255, 100, 100, 0.05); }
+  .py-spinner {
+    width: 18px; height: 18px; flex-shrink: 0;
+    border: 2px solid rgba(255, 216, 102, 0.2);
+    border-top-color: #ffd866;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  .py-banner.ready .py-spinner {
+    border: 2px solid rgba(168, 230, 207, 0.6);
+    animation: none;
+    position: relative;
+  }
+  .py-banner.ready .py-spinner::after {
+    content: ''; position: absolute; left: 4px; top: 1px;
+    width: 6px; height: 10px;
+    border: solid #a8e6cf;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .py-banner.error .py-spinner { border-color: rgba(255, 100, 100, 0.6); animation: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .py-status {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: rgba(232, 236, 248, 0.85);
+    flex: 1;
+  }
+  .py-status .label { color: #ffd866; opacity: 0.85; margin-right: 10px; }
+  .py-banner.ready .py-status .label { color: #a8e6cf; }
+  .py-banner.error .py-status .label { color: #ff7777; }
+
+  /* ── layout ──────────────────────────────────────── */
   .layout { display: grid; grid-template-columns: 1fr 360px; gap: 28px; margin-bottom: 80px; }
   @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
 
@@ -112,11 +181,8 @@
   }
   .panel-body { padding: 22px 24px; }
 
-  /* ── network viz ────────────────────────────────── */
-  #network {
-    width: 100%; height: 560px;
-    background: rgba(8, 10, 22, 0.5);
-  }
+  /* ── network viz ─────────────────────────────────── */
+  #network { width: 100%; height: 560px; background: rgba(8, 10, 22, 0.5); }
   .legend {
     display: flex; gap: 22px; flex-wrap: wrap;
     padding: 14px 24px;
@@ -126,11 +192,9 @@
     color: rgba(200, 210, 240, 0.55);
   }
   .legend-item { display: flex; align-items: center; gap: 8px; }
-  .legend-swatch {
-    width: 14px; height: 3px; border-radius: 1px;
-  }
+  .legend-swatch { width: 14px; height: 3px; border-radius: 1px; }
 
-  /* ── controls ───────────────────────────────────── */
+  /* ── controls ────────────────────────────────────── */
   .control-group { margin-bottom: 24px; }
   .control-group:last-child { margin-bottom: 0; }
   .control-label {
@@ -145,12 +209,8 @@
     width: 100%; appearance: none; -webkit-appearance: none;
     background: transparent; cursor: pointer;
   }
-  input[type="range"]::-webkit-slider-runnable-track {
-    height: 2px; background: rgba(127, 179, 245, 0.2); border-radius: 1px;
-  }
-  input[type="range"]::-moz-range-track {
-    height: 2px; background: rgba(127, 179, 245, 0.2); border-radius: 1px;
-  }
+  input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: rgba(127, 179, 245, 0.2); border-radius: 1px; }
+  input[type="range"]::-moz-range-track { height: 2px; background: rgba(127, 179, 245, 0.2); border-radius: 1px; }
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none; appearance: none;
     width: 14px; height: 14px; margin-top: -6px;
@@ -188,17 +248,18 @@
     border-radius: 3px;
     transition: all 0.2s;
   }
-  .btn:hover { border-color: rgba(127, 179, 245, 0.7); background: linear-gradient(135deg, rgba(127, 179, 245, 0.2), rgba(168, 230, 207, 0.2)); }
-  .btn:active { transform: translateY(1px); }
+  .btn:hover:not(:disabled) { border-color: rgba(127, 179, 245, 0.7); background: linear-gradient(135deg, rgba(127, 179, 245, 0.2), rgba(168, 230, 207, 0.2)); }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
   .btn-secondary {
     margin-top: 8px;
     background: transparent;
     border-color: rgba(255, 255, 255, 0.1);
     color: rgba(200, 210, 240, 0.55);
   }
-  .btn-secondary:hover { color: rgba(232, 236, 248, 0.92); border-color: rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.03); }
+  .btn-secondary:hover:not(:disabled) { color: rgba(232, 236, 248, 0.92); border-color: rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.03); }
 
-  /* ── role cards ─────────────────────────────────── */
+  /* ── role cards ──────────────────────────────────── */
   .roles-grid {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 14px;
@@ -238,7 +299,7 @@
   }
   .role-card-stats span strong { color: rgba(232, 236, 248, 0.85); font-weight: 700; }
 
-  /* ── algorithm explainer ───────────────────────── */
+  /* ── algorithm explainer ─────────────────────────── */
   .explainer { margin-top: 80px; max-width: 940px; }
   .explainer h2 {
     font-family: 'Space Grotesk', sans-serif;
@@ -266,10 +327,7 @@
     color: rgba(232, 236, 248, 0.92);
     margin-bottom: 10px;
   }
-  .step p {
-    font-size: 13px; line-height: 1.7;
-    color: rgba(200, 215, 245, 0.55);
-  }
+  .step p { font-size: 13px; line-height: 1.7; color: rgba(200, 215, 245, 0.55); }
   code {
     font-family: 'Space Mono', monospace;
     font-size: 0.9em;
@@ -296,28 +354,46 @@
 <canvas id="bgStars"></canvas>
 
 <div class="content">
-  <a href="index.html" class="back-link">← Star Map</a>
+  <div class="top-bar">
+    <a href="index.html" class="back-link">← Star Map</a>
+    <div class="ext-links">
+      <a class="ext-link colab" id="colabLink" href="#" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4.54 9.46L1.7 6.62a8 8 0 0 0 0 10.76l2.84-2.84a4 4 0 0 1 0-5.08zM12 4a8 8 0 0 0-5.66 2.34l2.83 2.83A4 4 0 0 1 12 8a4 4 0 0 1 4 4 4 4 0 0 1-1.17 2.83l2.83 2.83A8 8 0 0 0 12 4zm5.46 5.46a4 4 0 0 1 0 5.08l2.84 2.84a8 8 0 0 0 0-10.76l-2.84 2.84zM12 20a8 8 0 0 0 5.66-2.34l-2.83-2.83A4 4 0 0 1 12 16a4 4 0 0 1-4-4 4 4 0 0 1 1.17-2.83L6.34 6.34A8 8 0 0 0 12 20z"/></svg>
+        Open in Colab
+      </a>
+      <a class="ext-link gh" id="ghLink" href="#" target="_blank" rel="noopener">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.9 2.9 1.4 3.6 1 .1-.8.4-1.4.8-1.7-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.4-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.2.9 2.4v3.5c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+        Notebook source
+      </a>
+    </div>
+  </div>
 
   <header class="header">
-    <div class="eyebrow">Final Project · DSA · 2025</div>
+    <div class="eyebrow">Final Project · DSA · 2025 · Live Python via Pyodide</div>
     <h1><em>Conversation Graph:</em><br>Inferring Communication Roles from Sentiment-Weighted Interactions</h1>
     <p class="subtitle">
       A custom doubly-linked-list sliding temporal window pairs with a directed weighted graph
-      to model team communication from a transcript. Each utterance is scored with a VADER-style
-      sentiment lexicon, edges inherit the average sentiment of the interactions they represent,
-      and each speaker's role is inferred from in- and out-degree.
+      to model team communication from a transcript. Each utterance is scored with VADER,
+      edges inherit the average sentiment of the interactions they represent, and each speaker's
+      role is inferred from in- and out-degree. The original notebook code runs unmodified in
+      your browser — Python compiled to WebAssembly via Pyodide.
     </p>
     <div class="meta-tags">
+      <span class="meta-tag python">Python · Pyodide WASM</span>
       <span class="meta-tag">Doubly Linked List</span>
       <span class="meta-tag">Directed Graph</span>
       <span class="meta-tag">Sliding Window O(1)</span>
-      <span class="meta-tag">VADER Sentiment</span>
-      <span class="meta-tag">Group Project</span>
+      <span class="meta-tag">VADER (vaderSentiment)</span>
+      <span class="meta-tag">pandas</span>
     </div>
   </header>
 
+  <div class="py-banner" id="pyBanner">
+    <div class="py-spinner"></div>
+    <div class="py-status"><span class="label" id="pyLabel">BOOTING</span><span id="pyMsg">Downloading Python runtime (~6 MB on first visit, cached afterward)…</span></div>
+  </div>
+
   <div class="layout">
-    <!-- Visualization panel -->
     <section class="panel">
       <div class="panel-header">
         <span class="panel-title">Interaction Network</span>
@@ -332,7 +408,6 @@
       </div>
     </section>
 
-    <!-- Controls panel -->
     <aside class="panel">
       <div class="panel-header"><span class="panel-title">Controls</span></div>
       <div class="panel-body">
@@ -350,23 +425,21 @@
         </div>
 
         <div class="control-group">
-          <button class="btn" id="runBtn">Rebuild Graph</button>
-          <button class="btn btn-secondary" id="resetBtn">Reset to Sample</button>
+          <button class="btn" id="runBtn" disabled>Rebuild Graph</button>
+          <button class="btn btn-secondary" id="resetBtn" disabled>Reset to Sample</button>
         </div>
       </div>
     </aside>
   </div>
 
-  <!-- Role cards -->
   <section>
     <div class="panel-header" style="border-bottom:none; padding:0 0 18px;">
       <span class="panel-title">Inferred Roles</span>
-      <span class="panel-title" style="opacity:0.55;">out-deg ≥ 6 + in-deg ≥ 4 → Leader · out-deg ≥ 6, in &lt; 4 → Active · in ≥ 6, out &lt; 4 → Frequently Addressed</span>
+      <span class="panel-title" style="opacity:0.55;">out ≥ avg + in ≥ avg → Leader · out ≥ avg, in &lt; avg → Active · in ≥ avg, out &lt; avg → Frequently Addressed · else → Observer</span>
     </div>
     <div class="roles-grid" id="rolesGrid"></div>
   </section>
 
-  <!-- Explainer -->
   <section class="explainer">
     <h2>How it works</h2>
     <div class="steps">
@@ -376,8 +449,7 @@
         <p>
           A doubly-linked list keeps every utterance from the last <code>w</code> seconds. As the transcript
           advances, old events are popped from the head in <code>O(1)</code> and new ones appended at the tail.
-          The list is the conversational "short-term memory" — anyone still in it is considered an addressable
-          peer.
+          The list is the conversational "short-term memory" — anyone still in it is considered an addressable peer.
         </p>
       </div>
       <div class="step">
@@ -391,31 +463,35 @@
       </div>
       <div class="step">
         <div class="step-num">03 · SENTIMENT</div>
-        <h3>VADER-style Scoring</h3>
+        <h3>VADER Compound Score</h3>
         <p>
-          Every utterance gets a compound sentiment score from a curated valence lexicon (with negation,
-          punctuation, and capitalization handling). Each edge stores the running average of its underlying
-          interactions; that average drives the edge color in the visualization.
+          Every utterance is fed through VADER (Valence Aware Dictionary for sEntiment Reasoning) — the same
+          analyzer used in the notebook. Each edge stores the running average of its underlying interactions;
+          that average drives the edge color in the visualization.
         </p>
       </div>
       <div class="step">
         <div class="step-num">04 · ROLES</div>
         <h3>Role Classification</h3>
         <p>
-          Once the graph is built, each speaker's <code>in-degree</code> and <code>out-degree</code> are
-          summed across all edges. Simple thresholds map the (in, out) pair to a role:
-          <em>Leader / Coordinator</em>, <em>Active Speaker</em>, <em>Frequently Addressed</em>, or
-          <em>Observer</em>.
+          Once the graph is built, the group's average <code>in-degree</code> and <code>out-degree</code> are
+          computed. Each speaker is then classified relative to those averages:
+          <em>Leader / Coordinator</em> (high in &amp; out), <em>Active Speaker</em> (high out, low in),
+          <em>Frequently Addressed</em> (high in, low out), or <em>Observer / Quiet Participant</em>.
+          Adapts to the conversation rather than using fixed thresholds.
         </p>
       </div>
     </div>
 
     <div class="footnote">
-      Demo is a faithful in-browser port of the Python notebook (course: Data Structures &amp; Algorithms).
-      Visualization uses <a href="https://visjs.github.io/vis-network/docs/network/" target="_blank" rel="noopener">vis-network</a>
-      — the same library <code>pyvis</code> wraps under the hood — so the look mirrors the notebook output.
-      Sentiment is approximated with an embedded VADER-style lexicon so the page is fully self-contained;
-      the original notebook uses NLTK's full VADER analyzer.
+      The Python classes (<code>DLLNode</code>, <code>TemporalWindowList</code>, <code>InteractionGraph</code>) and
+      the main processing loop are taken verbatim from the project notebook. They run under
+      <a href="https://pyodide.org" target="_blank" rel="noopener">Pyodide</a> — a CPython interpreter compiled to
+      WebAssembly — using the official <a href="https://github.com/cjhutto/vaderSentiment" target="_blank" rel="noopener">vaderSentiment</a>
+      package (same algorithm and lexicon as NLTK's VADER). Visualization uses
+      <a href="https://visjs.github.io/vis-network/docs/network/" target="_blank" rel="noopener">vis-network</a>,
+      the same library <code>pyvis</code> wraps under the hood. No algorithmic differences from the notebook —
+      this page is the actual final-project code, executing in your browser.
     </div>
   </section>
 </div>
@@ -451,189 +527,20 @@
 })();
 
 /* ──────────────────────────────────────────────────────────────────────
-   VADER-STYLE SENTIMENT LEXICON  (embedded subset of ~250 high-impact
-   words from the public VADER lexicon, sufficient for conversational
-   text. Original NLTK VADER lexicon: github.com/cjhutto/vaderSentiment)
+   EXTERNAL LINKS  ·  edit GH_USER and GH_REPO if your paths differ
    ────────────────────────────────────────────────────────────────────── */
-const LEXICON = {
-  // strong positive
-  "love":3.2,"loved":3.2,"loves":3.2,"loving":2.6,"lovely":2.8,"awesome":3.1,"amazing":2.8,
-  "excellent":2.7,"perfect":2.7,"fantastic":2.6,"brilliant":2.5,"wonderful":2.7,"great":3.1,
-  "outstanding":2.6,"superb":3.0,"terrific":3.0,"yes":1.7,"yeah":1.4,"yay":2.6,
-  // positive
-  "good":1.9,"nice":1.8,"happy":2.7,"glad":2.0,"pleased":1.7,"smart":1.9,"cool":1.3,
-  "fun":1.9,"clear":0.9,"easy":1.2,"safe":1.1,"win":2.1,"won":2.1,"winning":2.0,
-  "succeed":2.5,"success":2.6,"successful":2.4,"correct":1.9,"right":1.4,"works":1.4,
-  "working":0.7,"solved":2.2,"solve":2.0,"solving":1.5,"got":0.5,"yes!":2.4,"finally":1.0,
-  "found":1.4,"find":0.8,"finds":0.7,"helpful":1.9,"helped":1.5,"thanks":1.7,"thank":1.5,
-  "ok":0.7,"okay":0.7,"sure":1.2,"trust":2.3,"agreed":1.7,"agree":1.4,"like":1.5,
-  "liked":1.5,"likes":1.5,"good!":2.5,"yes!":2.4,"clever":2.2,"genius":2.4,"lucky":1.6,
-  "calm":1.7,"safe":1.7,"hope":1.9,"hopes":1.7,"hopeful":1.8,"better":1.9,
-  // mild positive
-  "ah":0.6,"oh":0.0,"hm":0.0,"interesting":1.0,"makes sense":1.5,
-  // negative
-  "bad":-2.5,"awful":-2.5,"terrible":-3.4,"horrible":-3.0,"worst":-3.1,"worse":-2.5,
-  "hate":-2.7,"hated":-2.7,"hates":-2.7,"hating":-2.6,"angry":-2.7,"mad":-1.8,
-  "frustrated":-2.4,"frustrating":-2.4,"annoying":-2.0,"annoyed":-1.9,"stressed":-1.6,
-  "wrong":-2.1,"failed":-2.5,"fail":-2.5,"failing":-2.3,"failure":-2.7,"broken":-2.0,
-  "broke":-1.5,"stuck":-1.7,"hard":-0.4,"difficult":-1.6,"impossible":-1.9,
-  "no":-1.2,"not":-0.7,"never":-1.2,"can't":-0.8,"won't":-0.8,"don't":-0.4,
-  "stupid":-2.4,"dumb":-2.0,"useless":-2.7,"pointless":-2.0,"boring":-1.7,
-  "tired":-1.4,"sick":-1.7,"hurts":-1.6,"hurt":-1.6,"pain":-2.4,
-  "scared":-1.8,"afraid":-2.0,"worried":-1.7,"worry":-1.6,"confused":-1.4,
-  "lost":-1.6,"missing":-1.0,"missed":-1.1,"mistake":-1.5,"mistakes":-1.6,
-  "trouble":-1.8,"problem":-1.4,"problems":-1.4,"issue":-0.9,"issues":-1.0,
-  "ugh":-1.6,"crap":-1.7,"damn":-1.6,"shoot":-0.6,"oops":-0.8,
-  "ridiculous":-1.7,"disappointed":-2.1,"disappointing":-2.0,
-  // exploration / state
-  "panic":-2.4,"nervous":-1.5,"nope":-1.2,"hopeless":-2.3,"give up":-2.1,
-};
-const NEGATIONS = new Set(["not","no","never","none","neither","nor","cannot","can't","won't","wouldn't","shouldn't","couldn't","don't","doesn't","didn't","isn't","aren't","wasn't","weren't","ain't"]);
-const BOOSTERS = {
-  "very":0.293,"really":0.293,"so":0.2,"super":0.293,"extremely":0.293,
-  "absolutely":0.293,"completely":0.293,"totally":0.293,"definitely":0.2,
-  "kind of":-0.293,"kinda":-0.293,"sort of":-0.293,"slightly":-0.293,"somewhat":-0.293,
-  "barely":-0.293,"hardly":-0.293,
-};
-
-function vaderCompound(text) {
-  if (!text || typeof text !== 'string') return 0;
-  const raw = text.trim();
-  if (!raw) return 0;
-  // Track ALLCAPS amplification (VADER does this when the whole utterance
-  // isn't all caps but some words are).
-  const words = raw.match(/[A-Za-z']+|[!?]/g) || [];
-  const lower = words.map(w => w.toLowerCase());
-  // Are any words ALLCAPS while at least one isn't?
-  const hasAllCaps = words.some(w => w.length > 1 && w === w.toUpperCase() && /[A-Z]/.test(w));
-  const isAllCaps = words.every(w => w === w.toUpperCase());
-  const capAmp = (hasAllCaps && !isAllCaps) ? 0.733 : 0;
-
-  let valences = [];
-  for (let i = 0; i < lower.length; i++) {
-    const w = lower[i];
-    if (!(w in LEXICON)) continue;
-    let v = LEXICON[w];
-    // ALLCAPS bump for this individual word
-    if (words[i].length > 1 && words[i] === words[i].toUpperCase() && /[A-Z]/.test(words[i]) && !isAllCaps) {
-      v += v > 0 ? 0.733 : -0.733;
-    }
-    // Boosters (one and two-back)
-    for (let back = 1; back <= 2; back++) {
-      if (i - back < 0) break;
-      const prev = lower[i - back];
-      if (prev in BOOSTERS) {
-        let bump = BOOSTERS[prev];
-        if (back === 2) bump *= 0.95;
-        if (v > 0) v += bump; else v -= bump;
-      }
-    }
-    // Negation lookback (3 words)
-    for (let back = 1; back <= 3; back++) {
-      if (i - back < 0) break;
-      if (NEGATIONS.has(lower[i - back])) { v *= -0.74; break; }
-    }
-    valences.push(v);
-  }
-
-  // Punctuation amp
-  const exclam = (raw.match(/!/g) || []).length;
-  const quest = (raw.match(/\?/g) || []).length;
-  const punctAmp = Math.min(exclam, 4) * 0.292 + (quest >= 2 ? Math.min(quest, 4) * 0.18 : 0);
-
-  let sumV = valences.reduce((a, b) => a + b, 0);
-  if (sumV > 0) sumV += punctAmp; else if (sumV < 0) sumV -= punctAmp;
-
-  // Normalize like VADER
-  const ALPHA = 15;
-  const compound = sumV / Math.sqrt(sumV * sumV + ALPHA);
-  return Math.max(-1, Math.min(1, compound));
-}
+const GH_USER = "OwenKeyt";
+const GH_REPO = "OwenKeyt.github.io";
+const GH_BRANCH = "main";
+const NB_PATH = "FinalProjectDSA.ipynb";
+document.getElementById('colabLink').href =
+  `https://colab.research.google.com/github/${GH_USER}/${GH_REPO}/blob/${GH_BRANCH}/${NB_PATH}`;
+document.getElementById('ghLink').href =
+  `https://github.com/${GH_USER}/${GH_REPO}/blob/${GH_BRANCH}/${NB_PATH}`;
 
 /* ──────────────────────────────────────────────────────────────────────
-   PORTED CLASSES (DLLNode, TemporalWindowList, InteractionGraph)
-   ────────────────────────────────────────────────────────────────────── */
-class DLLNode {
-  constructor(time, speaker, sentiment) {
-    this.time = time; this.speaker = speaker; this.sentiment = sentiment;
-    this.next = null; this.prev = null;
-  }
-}
-
-class TemporalWindowList {
-  constructor(windowSeconds = 5.0) {
-    this.head = null; this.tail = null; this.windowSeconds = windowSeconds;
-  }
-  append(time, speaker, sentiment) {
-    const node = new DLLNode(time, speaker, sentiment);
-    if (!this.tail) { this.head = this.tail = node; }
-    else { this.tail.next = node; node.prev = this.tail; this.tail = node; }
-  }
-  removeOldEvents(currentTime) {
-    while (this.head && (currentTime - this.head.time) > this.windowSeconds) {
-      this.head = this.head.next;
-      if (this.head) this.head.prev = null;
-      else this.tail = null;
-    }
-  }
-  getRecentSpeakers() {
-    const out = [];
-    let cur = this.head;
-    while (cur) { out.push(cur.speaker); cur = cur.next; }
-    return out;
-  }
-}
-
-class InteractionGraph {
-  constructor() { this.vertices = {}; this.sentiments = {}; }
-  addInteraction(speaker, addressee, sentiment = 0) {
-    if (speaker === addressee) return;
-    if (!this.vertices[speaker]) this.vertices[speaker] = {};
-    if (!this.vertices[addressee]) this.vertices[addressee] = {};
-    if (!(addressee in this.vertices[speaker])) this.vertices[speaker][addressee] = 0;
-    this.vertices[speaker][addressee] += 1;
-    const k = speaker + "→" + addressee;
-    if (!this.sentiments[k]) this.sentiments[k] = [];
-    this.sentiments[k].push(sentiment);
-  }
-  getAvgSentiment(speaker, addressee) {
-    const k = speaker + "→" + addressee;
-    const arr = this.sentiments[k];
-    if (!arr || arr.length === 0) return 0;
-    return arr.reduce((a, b) => a + b, 0) / arr.length;
-  }
-  getOutDegree(player) {
-    const v = this.vertices[player];
-    if (!v) return 0;
-    return Object.values(v).reduce((a, b) => a + b, 0);
-  }
-  getInDegree(player) {
-    let total = 0;
-    for (const sp in this.vertices) {
-      total += this.vertices[sp][player] || 0;
-    }
-    return total;
-  }
-}
-
-function classifyRole(graph, player) {
-  const out = graph.getOutDegree(player);
-  const inn = graph.getInDegree(player);
-  if (out >= 6 && inn >= 4) return "Leader / Coordinator";
-  if (out >= 6 && inn < 4)  return "Active Speaker";
-  if (inn >= 6 && out < 4)  return "Frequently Addressed";
-  return "Observer";
-}
-
-function edgeColor(s) {
-  if (s < -0.3) return "#FF4444";
-  if (s >  0.3) return "#44BB44";
-  return "#888888";
-}
-
-/* ──────────────────────────────────────────────────────────────────────
-   SAMPLE TRANSCRIPT (escape room scenario, 4 players, ~50 utterances)
-   Format: time(seconds) | speaker | text
+   SAMPLE TRANSCRIPT (escape room scenario · 4 players)
+   Format:  time(seconds) | speaker | text
    ────────────────────────────────────────────────────────────────────── */
 const SAMPLE_TRANSCRIPT = `2.0 | Player 1 | OK team, door just locked. We have sixty minutes.
 3.5 | Player 1 | Player 3, check the bookshelf. Player 2, the desk.
@@ -673,24 +580,302 @@ const SAMPLE_TRANSCRIPT = `2.0 | Player 1 | OK team, door just locked. We have s
 95.0 | Player 4 | Cool, glad we made it.`;
 
 /* ──────────────────────────────────────────────────────────────────────
-   PARSER  ·  GRAPH BUILD  ·  RENDER
+   PYTHON SOURCE  ·  the original notebook classes, verbatim
    ────────────────────────────────────────────────────────────────────── */
-function parseTranscript(text) {
-  const rows = [];
-  const lines = text.split(/\n/);
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const parts = trimmed.split('|').map(s => s.trim());
-    if (parts.length < 3) continue;
-    const t = parseFloat(parts[0]);
-    if (isNaN(t)) continue;
-    rows.push({ time: t, speaker: parts[1], text: parts.slice(2).join('|') });
-  }
-  rows.sort((a, b) => a.time - b.time);
-  return rows;
+const PYTHON_SOURCE = String.raw`
+import pandas as pd
+import math
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+analyzer = SentimentIntensityAnalyzer()
+
+def get_sentiment(text):
+    return analyzer.polarity_scores(text)['compound']
+
+
+# ============================================================
+# === BEGIN VERBATIM NOTEBOOK CODE ===========================
+# ============================================================
+
+class DLLNode:
+    """A node in doubly linked list, represents a single spoken event or utterance"""
+    def __init__(self, time, speaker, sentiment):
+        self.time = time
+        self.speaker = speaker
+        self.sentiment = sentiment
+        self.next = None
+        self.prev = None
+
+
+class TemporalWindowList:
+    """Custom doubly linked list that maintains a sliding temporal window of events."""
+    def __init__(self, window_seconds=5.0):
+        self.head = None
+        self.tail = None
+        self.window_seconds = window_seconds
+
+    def append(self, time, speaker, sentiment):
+        new_node = DLLNode(time, speaker, sentiment)
+        if self.tail is None:
+            self.head = self.tail = new_node
+        else:
+            self.tail.next = new_node
+            new_node.prev = self.tail
+            self.tail = new_node
+
+    def remove_old_events(self, current_time):
+        while self.head and (current_time - self.head.time) > self.window_seconds:
+            self.head = self.head.next
+            if self.head:
+                self.head.prev = None
+            else:
+                self.tail = None
+
+    def get_recent_speakers(self):
+        speakers = []
+        current = self.head
+        while current:
+            speakers.append(current.speaker)
+            current = current.next
+        return speakers
+
+
+class InteractionGraph:
+    """Directed, weighted graph representing interactions between speakers."""
+    def __init__(self):
+        self.vertices = {}
+        self.sentiments = {}
+
+    def add_interaction(self, speaker, addressee, sentiment=0.0):
+        if speaker == addressee:
+            return
+        if speaker not in self.vertices:
+            self.vertices[speaker] = {}
+        if addressee not in self.vertices:
+            self.vertices[addressee] = {}
+        if addressee not in self.vertices[speaker]:
+            self.vertices[speaker][addressee] = 0
+        self.vertices[speaker][addressee] += 1
+        key = (speaker, addressee)
+        if key not in self.sentiments:
+            self.sentiments[key] = []
+        self.sentiments[key].append(sentiment)
+
+    def get_avg_sentiment(self, speaker, addressee):
+        key = (speaker, addressee)
+        if key not in self.sentiments or len(self.sentiments[key]) == 0:
+            return 0.0
+        return sum(self.sentiments[key]) / len(self.sentiments[key])
+
+    def get_out_degree(self, player):
+        if player not in self.vertices:
+            return 0
+        return sum(self.vertices[player].values())
+
+
+def get_in_degree(graph, player):
+    """Counts how many interactions are directed towards this player."""
+    total = 0
+    for speaker, connections in graph.vertices.items():
+        total += connections.get(player, 0)
+    return total
+
+
+class spoken_at_queue:
+    """Simple FIFO queue of (time, speaker, text) tuples that supports
+       querying for any events within +/- window seconds of a target time."""
+    def __init__(self):
+        self.items = []
+
+    def enqueue(self, item):
+        self.items.append(item)
+
+    def query_by_time(self, target_time, window=2.0):
+        results = []
+        for event in self.items:
+            event_time, speaker, text = event
+            if abs(event_time - target_time) <= window:
+                results.append(event)
+        return results
+
+
+def classify_role(graph, player):
+    """Classifies each player based on relative communication behavior."""
+    players = list(graph.vertices.keys())
+    if not players:
+        return "Unknown"
+
+    # 1. Calculate group averages
+    total_out = sum(graph.get_out_degree(p) for p in players)
+    total_in = sum(get_in_degree(graph, p) for p in players)
+
+    avg_out = total_out / len(players) if players else 0
+    avg_in = total_in / len(players) if players else 0
+
+    # 2. Get player stats
+    out_degree = graph.get_out_degree(player)
+    in_degree = get_in_degree(graph, player)
+
+    # 3. Classify based on relation to the average
+    if out_degree >= avg_out and in_degree >= avg_in:
+        return "Leader / Coordinator"
+    elif out_degree >= avg_out and in_degree < avg_in:
+        return "Active Speaker"
+    elif out_degree < avg_out and in_degree >= avg_in:
+        return "Frequently Addressed"
+    else:
+        return "Observer / Quiet Participant"
+
+
+def get_edge_color(avg_sentiment):
+    if avg_sentiment < -0.3:
+        return "#FF4444"
+    elif avg_sentiment > 0.3:
+        return "#44BB44"
+    else:
+        return "#888888"
+
+# ============================================================
+# === END VERBATIM NOTEBOOK CODE =============================
+# ============================================================
+
+
+def parse_transcript(text):
+    """Convert 'time | speaker | text' lines into a pandas DataFrame
+       matching the schema the notebook's main loop expects."""
+    rows = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        parts = [s.strip() for s in line.split('|')]
+        if len(parts) < 3:
+            continue
+        try:
+            t = float(parts[0])
+        except ValueError:
+            continue
+        rows.append({
+            'start_time': t,
+            'speaker_id': parts[1],
+            'text': '|'.join(parts[2:]),
+        })
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values('start_time').reset_index(drop=True)
+    return df
+
+
+def run_analysis(transcript_text, window_seconds):
+    """Browser entry point. Runs the notebook's main loop verbatim and
+       returns a JSON-serializable dict for the JS layer to render."""
+    df = parse_transcript(transcript_text)
+
+    # === MAIN LOOP (verbatim from notebook cell 7) ===
+    time_window = TemporalWindowList(window_seconds=window_seconds)
+    team_graph = InteractionGraph()
+    for index, row in df.iterrows():
+        speaker = str(row.get('speaker_id', 'Unknown')).strip()
+        text = str(row.get('text', ''))
+        try:
+            start_time = float(row.get('start_time', 0))
+        except:
+            continue
+        if pd.isna(text) or text.strip() == "" or speaker == 'Unknown':
+            continue
+        time_window.remove_old_events(start_time)
+        recent_speakers = time_window.get_recent_speakers()
+        sentiment = get_sentiment(text)
+        for prev_speaker in recent_speakers:
+            team_graph.add_interaction(speaker, prev_speaker, sentiment)
+        time_window.append(start_time, speaker, sentiment)
+
+    # === Marshal results for JS layer ===
+    # Include every speaker that ever appeared, so isolated speakers still render
+    all_speakers = set(df['speaker_id'].dropna().tolist()) if not df.empty else set()
+    all_speakers.update(team_graph.vertices.keys())
+    nodes = []
+    for player in all_speakers:
+        nodes.append({
+            'id': player,
+            'activity': team_graph.get_out_degree(player),
+        })
+
+    edges = []
+    for speaker, connections in team_graph.vertices.items():
+        for addressee, weight in connections.items():
+            if weight > 0:
+                avg = team_graph.get_avg_sentiment(speaker, addressee)
+                edges.append({
+                    'from_': speaker,
+                    'to': addressee,
+                    'weight': weight,
+                    'avgSentiment': float(avg),
+                    'color': get_edge_color(avg),
+                })
+
+    # roles for every speaker (already computed all_speakers above)
+    roles = {}
+    for player in all_speakers:
+        role = classify_role(team_graph, player)
+        roles[player] = {
+            'role': role if role is not None else 'Observer / Quiet Participant',
+            'out': team_graph.get_out_degree(player),
+            'in_': get_in_degree(team_graph, player),
+        }
+
+    return {
+        'nodes': nodes,
+        'edges': edges,
+        'roles': roles,
+        'utteranceCount': int(len(df)),
+    }
+`;
+
+/* ──────────────────────────────────────────────────────────────────────
+   PYODIDE BOOT
+   ────────────────────────────────────────────────────────────────────── */
+let pyodide = null;
+const banner = document.getElementById('pyBanner');
+const labelEl = document.getElementById('pyLabel');
+const msgEl = document.getElementById('pyMsg');
+
+function setStatus(label, msg, state) {
+  labelEl.textContent = label;
+  msgEl.textContent = msg;
+  banner.classList.remove('ready', 'error');
+  if (state) banner.classList.add(state);
 }
 
+async function bootPyodide() {
+  try {
+    setStatus('BOOTING', 'Downloading Python runtime (~6 MB on first visit, cached afterward)…');
+    pyodide = await loadPyodide();
+
+    setStatus('LOADING', 'Loading pandas (pre-built WASM wheel)…');
+    await pyodide.loadPackage(['pandas', 'micropip']);
+
+    setStatus('INSTALLING', 'Installing vaderSentiment from PyPI…');
+    const micropip = pyodide.pyimport('micropip');
+    await micropip.install('vaderSentiment');
+
+    setStatus('COMPILING', 'Loading project Python source…');
+    pyodide.runPython(PYTHON_SOURCE);
+
+    setStatus('READY', 'Python runtime live · running notebook code unmodified.', 'ready');
+    document.getElementById('runBtn').disabled = false;
+    document.getElementById('resetBtn').disabled = false;
+
+    await buildAndRender();
+  } catch (err) {
+    console.error(err);
+    setStatus('ERROR', 'Failed to load Python runtime: ' + err.message, 'error');
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   RUN ANALYSIS via Pyodide  ·  render with vis-network
+   ────────────────────────────────────────────────────────────────────── */
 const PLAYER_COLORS = {
   "Player 1": "#FF8C42",
   "Player 2": "#43AA8B",
@@ -701,108 +886,102 @@ const DEFAULT_COLOR = "#E5E5E5";
 
 let networkInstance = null;
 
-function buildAndRender() {
-  const rawTranscript = document.getElementById('transcriptInput').value;
+async function buildAndRender() {
+  if (!pyodide) return;
+  const transcript = document.getElementById('transcriptInput').value;
   const windowSeconds = parseFloat(document.getElementById('windowSlider').value);
-  const rows = parseTranscript(rawTranscript);
-  if (rows.length === 0) {
-    document.getElementById('netStats').textContent = "No valid rows parsed";
+
+  pyodide.globals.set('__transcript', transcript);
+  pyodide.globals.set('__window_seconds', windowSeconds);
+  let result;
+  try {
+    const proxy = pyodide.runPython('run_analysis(__transcript, __window_seconds)');
+    result = proxy.toJs({ dict_converter: Object.fromEntries });
+    proxy.destroy();
+  } catch (err) {
+    console.error('Python error:', err);
+    document.getElementById('netStats').textContent = 'Python error · check console';
     return;
   }
 
-  const win = new TemporalWindowList(windowSeconds);
-  const graph = new InteractionGraph();
-
-  for (const row of rows) {
-    if (!row.text || !row.speaker || row.speaker === 'Unknown') continue;
-    win.removeOldEvents(row.time);
-    const recent = win.getRecentSpeakers();
-    const sentiment = vaderCompound(row.text);
-    for (const prev of recent) {
-      graph.addInteraction(row.speaker, prev, sentiment);
-    }
-    win.append(row.time, row.speaker, sentiment);
+  if (!result || !result.nodes || result.nodes.length === 0) {
+    document.getElementById('netStats').textContent = 'No valid rows parsed';
+    document.getElementById('rolesGrid').innerHTML = '';
+    return;
   }
 
-  // Build vis-network nodes/edges
+  // Build nodes
   const nodes = [];
-  const players = Object.keys(graph.vertices);
-  for (const p of players) {
-    const activity = graph.getOutDegree(p);
-    const color = PLAYER_COLORS[p] || DEFAULT_COLOR;
+  for (const n of result.nodes) {
+    const color = PLAYER_COLORS[n.id] || DEFAULT_COLOR;
     nodes.push({
-      id: p,
-      label: p,
-      size: 14 + activity * 0.6,
+      id: n.id,
+      label: n.id,
+      size: 14 + n.activity * 0.6,
       color: { background: color, border: color, highlight: { background: color, border: '#fff' } },
       font: { color: '#e8ecf8', face: 'Space Grotesk', size: 16, strokeWidth: 0 },
-      title: `Total Replies (out): ${activity}`,
+      title: `Total Replies (out): ${n.activity}`,
     });
   }
 
+  // Build edges
   const edges = [];
-  for (const sp in graph.vertices) {
-    for (const ad in graph.vertices[sp]) {
-      const w = graph.vertices[sp][ad];
-      if (w <= 0) continue;
-      const avg = graph.getAvgSentiment(sp, ad);
-      edges.push({
-        from: sp, to: ad,
-        value: w,
-        title: `${sp} → ${ad}: ${w} interactions · avg sentiment ${avg.toFixed(2)}`,
-        color: { color: edgeColor(avg), highlight: edgeColor(avg) },
-        arrows: { to: { enabled: true, scaleFactor: 0.6 } },
-        smooth: { type: 'curvedCW', roundness: 0.18 },
-      });
-    }
+  for (const e of result.edges) {
+    edges.push({
+      from: e.from_, to: e.to,
+      value: e.weight,
+      title: `${e.from_} → ${e.to}: ${e.weight} interactions · avg sentiment ${e.avgSentiment.toFixed(2)}`,
+      color: { color: e.color, highlight: e.color },
+      arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+      smooth: { type: 'curvedCW', roundness: 0.18 },
+    });
   }
 
   const container = document.getElementById('network');
   if (networkInstance) networkInstance.destroy();
-  networkInstance = new vis.Network(container,
-    { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) },
-    {
-      physics: {
-        forceAtlas2Based: {
-          gravitationalConstant: -50, centralGravity: 0.012,
-          springLength: 200, springConstant: 0.05,
-        },
-        solver: 'forceAtlas2Based', stabilization: { iterations: 220 },
-      },
-      interaction: { hover: true, tooltipDelay: 120 },
-      edges: { smooth: { enabled: true, type: 'curvedCW', roundness: 0.18 }, scaling: { min: 1, max: 8 } },
-    }
-  );
+  networkInstance = new vis.Network(container, { nodes, edges }, {
+    nodes: { shape: 'dot', borderWidth: 2 },
+    edges: { width: 1.5, scaling: { min: 1, max: 10 }, smooth: { type: 'curvedCW', roundness: 0.18 } },
+    physics: {
+      enabled: true,
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -55, centralGravity: 0.012, springLength: 180, springConstant: 0.06, damping: 0.5 },
+      stabilization: { iterations: 200, fit: true },
+    },
+    interaction: { hover: true, dragNodes: true, zoomView: true },
+  });
 
-  // Render role cards
+  // Role cards
   const grid = document.getElementById('rolesGrid');
   grid.innerHTML = '';
-  const sorted = players.slice().sort();
-  for (const p of sorted) {
-    const out = graph.getOutDegree(p);
-    const inn = graph.getInDegree(p);
-    const role = classifyRole(graph, p);
+  const playerOrder = ['Player 1', 'Player 2', 'Player 3', 'Player 4'];
+  const knownPlayers = playerOrder.filter(p => result.roles[p]);
+  const otherPlayers = Object.keys(result.roles).filter(p => !playerOrder.includes(p));
+  const allPlayers = [...knownPlayers, ...otherPlayers];
+
+  for (const p of allPlayers) {
+    const r = result.roles[p];
     const color = PLAYER_COLORS[p] || DEFAULT_COLOR;
+    const total = r.out + r.in_;
+    const initiating = total > 0 ? Math.round((r.out / total) * 100) : 0;
     const card = document.createElement('div');
     card.className = 'role-card';
     card.style.setProperty('--player-color', color);
     card.innerHTML = `
       <div class="role-card-name">${p}</div>
-      <div class="role-card-role">${role}</div>
+      <div class="role-card-role">${r.role}</div>
       <div class="role-card-stats">
-        <span><strong>${out}</strong> out</span>
-        <span><strong>${inn}</strong> in</span>
-        <span><strong>${(out + inn) ? ((out / (out + inn)) * 100).toFixed(0) : 0}%</strong> initiating</span>
-      </div>
-    `;
+        <span><strong>${r.out}</strong> out</span>
+        <span><strong>${r.in_}</strong> in</span>
+        <span><strong>${initiating}%</strong> initiating</span>
+      </div>`;
     grid.appendChild(card);
   }
 
-  // Header stats
   const totalEdges = edges.length;
   const totalInteractions = edges.reduce((a, e) => a + e.value, 0);
   document.getElementById('netStats').textContent =
-    `${players.length} speakers · ${totalEdges} edges · ${totalInteractions} interactions · ${rows.length} utterances`;
+    `${result.nodes.length} speakers · ${totalEdges} edges · ${totalInteractions} interactions · ${result.utteranceCount} utterances`;
 }
 
 /* ──────────────────────────────────────────────────────────────────────
@@ -823,9 +1002,8 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   buildAndRender();
 });
 
-// init
 document.getElementById('transcriptInput').value = SAMPLE_TRANSCRIPT;
-buildAndRender();
+bootPyodide();
 </script>
 </body>
 </html>
