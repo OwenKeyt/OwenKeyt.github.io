@@ -236,6 +236,44 @@
     transition: border-color 0.2s;
   }
   textarea:focus { border-color: rgba(127, 179, 245, 0.4); }
+
+  /* ── transcript source selector (segmented control) ── */
+  .src-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    margin-bottom: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.25);
+  }
+  .src-btn {
+    padding: 9px 8px;
+    background: transparent;
+    border: none;
+    color: rgba(200, 210, 240, 0.55);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .src-btn + .src-btn { border-left: 1px solid rgba(255, 255, 255, 0.08); }
+  .src-btn:hover:not(.active) { color: rgba(232, 236, 248, 0.85); background: rgba(255, 255, 255, 0.02); }
+  .src-btn.active {
+    color: #a8e6cf;
+    background: linear-gradient(135deg, rgba(127, 179, 245, 0.1), rgba(168, 230, 207, 0.08));
+    box-shadow: inset 0 -2px 0 rgba(168, 230, 207, 0.5);
+  }
+  .src-meta {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    opacity: 0.55;
+    margin-left: 6px;
+  }
   .btn {
     width: 100%;
     padding: 12px 18px;
@@ -421,12 +459,16 @@
 
         <div class="control-group">
           <div class="control-label"><span>Transcript</span></div>
+          <div class="src-toggle" role="tablist">
+            <button class="src-btn active" data-src="sample" role="tab">Escape Room<span class="src-meta">35 lines</span></button>
+            <button class="src-btn" data-src="real" role="tab">Project Transcript<span class="src-meta">509 lines</span></button>
+          </div>
           <textarea id="transcriptInput" spellcheck="false"></textarea>
         </div>
 
         <div class="control-group">
           <button class="btn" id="runBtn" disabled>Rebuild Graph</button>
-          <button class="btn btn-secondary" id="resetBtn" disabled>Reset to Sample</button>
+          <button class="btn btn-secondary" id="resetBtn" disabled>Reset</button>
         </div>
       </div>
     </aside>
@@ -578,6 +620,519 @@ const SAMPLE_TRANSCRIPT = `2.0 | Player 1 | OK team, door just locked. We have s
 81.5 | Player 1 | YES! Brilliant work everyone.
 83.0 | Player 2 | Nice teamwork!
 95.0 | Player 4 | Cool, glad we made it.`;
+
+/* ──────────────────────────────────────────────────────────────────────
+   REAL PROJECT TRANSCRIPT  ·  full DSA group recording (509 utterances)
+   ────────────────────────────────────────────────────────────────────── */
+const REAL_TRANSCRIPT = String.raw`2 | Player 3 | Yeah, sure.
+4 | Player 3 | Okay.
+11 | Player 3 | Oh, okay.
+11.98 | Player 1 | Oh, we're starting.
+15 | Player 3 | Wait, so directions?
+19.96 | Player 1 | There's no directions.
+21.46 | Player 1 | And we need to solve this to reset it.
+28.58 | Player 1 | OK.
+34.02 | Player 1 | Is it based on the way they're facing?
+35 | Player 3 | Their heads, yeah.
+38 | Player 3 | Like this is up.
+42.8 | Player 1 | Yeah.
+43.3 | Player 1 | OK.
+43.8 | Player 1 | So start this way, this way.
+44 | Player 3 | Start.
+45.98 | Player 1 | Left.
+48 | Player 3 | Is this down? This looks like down, maybe.
+50 | Player 3 | This looks down right.
+51.96 | Player 4 | No, this one's down.
+53 | Player 3 | I mean, I'm not sure now, but we have duplicates.
+53.3 | Player 1 | I mean, that one's for sure down, but we have to do it first.
+56.96 | Player 4 | Wait, this one's right?
+58.42 | Player 1 | This is left.
+59.62 | Player 1 | I did left, right, down.
+60.96 | Player 4 | Like, if it's facing this way, it's facing this way.
+62.46 | Player 1 | Left, right, down.
+66 | Player 3 | I'm not sure that's down.
+67 | Player 3 | Wait, the finger's pointing downward, though.
+70 | Player 3 | Does that matter? They have two hands.
+72.78 | Player 1 | I'm just going to try it.
+78 | Player 3 | We'll also like the perspective.
+78.96 | Player 4 | But also, like, the perspective.
+79 | Player 3 | Yeah, which perspective are we looking at?
+81 | Player 3 | I think facing this way, right?
+81.12 | Player 1 | That's true.
+83.06 | Player 1 | I would be facing this way.
+85 | Player 3 | Possibly.
+86 | Player 3 | Where's it this way?
+86.9 | Player 1 | And if we're reading.
+87 | Player 3 | Probably this way.
+87.74 | Player 1 | Not this way.
+88 | Player 3 | I wonder if these things have anything on them.
+92.96 | Player 4 | So left, right, down.
+94 | Player 3 | What about this?
+95 | Player 3 | I think that's a problem.
+98 | Player 3 | Up.
+99.78 | Player 1 | That's what I did right before.
+102.5 | Player 1 | Up, right, up.
+105.78 | Player 1 | No.
+106 | Player 3 | No, so wait.
+107.28 | Player 1 | So maybe it is the hands.
+108.7 | Player 1 | Hands.
+116 | Player 3 | This has nothing left.
+116.96 | Player 4 | This is only left.
+118 | Player 3 | Or is it like the direction where the palm's facing?
+118.96 | Player 4 | Or is that the direction where the palm's facing? No.
+123 | Player 3 | I mean, you can tell the direction of the head by looking at this.
+124 | Player 3 | I think this one's facing this way.
+126.34 | Player 1 | Is that down?
+127 | Player 3 | Do you think anything has to do with the paint?
+127.96 | Player 4 | I don't think this is right.
+128 | Player 3 | Wait, is that a red paint?
+129 | Player 3 | Yeah, like footsteps type direction?
+141 | Player 3 | Like this one looks left, and then this one looks like he's moving this way.
+141.96 | Player 4 | Like, if it was a number code, maybe.
+145.1 | Player 1 | I can't tell this one.
+145.98 | Player 1 | Oh, in terms of the pain.
+147 | Player 3 | This one is going this way.
+149 | Player 3 | This guy has this footstep right here.
+151 | Player 3 | Which one does he want?
+151.9 | Player 1 | Here, here, though.
+154 | Player 3 | All right, so left, right, down.
+155.96 | Player 4 | Alright, so left, right, down.
+158.3 | Player 1 | Or left, down.
+159 | Player 3 | What did this have to do with him?
+159.1 | Player 1 | What are we going to do with this way, I thought?
+161 | Player 3 | What do we do with footsteps?
+161.74 | Player 1 | Wait, foot steps?
+161.96 | Player 4 | Wait, footsteps?
+163 | Player 3 | Okay, are we doing heads, hands, or footsteps?
+165 | Player 3 | We should do one, and then try again on another one.
+170 | Player 3 | We should specify which one we're going with.
+170.96 | Player 4 | Left? This one's definitely left. Left? Right?
+176.82 | Player 1 | I think this guy's facing this way.
+179 | Player 3 | Down.
+179.34 | Player 1 | OK, left.
+180 | Player 3 | Okay, left.
+181 | Player 3 | Yeah, I think down is, yeah.
+183 | Player 3 | Down.
+184 | Player 3 | Yeah, down.
+185.38 | Player 1 | Actually, no, no, no, wait, wait, wait.
+186 | Player 3 | I actually think this is facing this way.
+189 | Player 3 | Where there's two flat panes, that's the face.
+191 | Player 3 | Oh, that is his face.
+192 | Player 3 | I think it's actually facing this way.
+193.9 | Player 1 | So, left.
+195 | Player 3 | And then you said right?
+198.94 | Player 1 | Right.
+199 | Player 3 | I wonder if you can do, like, northeast or something.
+201.06 | Player 1 | And then this one is, I wonder if you can do, like,
+203.96 | Player 4 | Up?
+206 | Player 3 | No, I'll do it in the other direction.
+208.78 | Player 1 | I'm honestly having some trouble distinguishing
+211 | Player 3 | If anybody else wants to feel it out a little.
+214 | Player 3 | Because there are two flat panes.
+214.22 | Player 1 | Because there are two flat pains.
+216 | Player 3 | Like, if you look at this one, for example, like, right here and here, it's flat.
+217.66 | Player 1 | Are we analyzing this too much?
+219 | Player 3 | Might be overthinking it.
+220.96 | Player 4 | I think it's here.
+221 | Player 3 | We are going to touch it, right?
+221.66 | Player 1 | We aren't going to touch it, right?
+224.96 | Player 4 | I think it's here. The face is here. The face is here.
+225 | Player 3 | The face is here.
+226.82 | Player 1 | So, which way?
+227 | Player 3 | So, it's like...
+228 | Player 3 | Wow.
+229 | Player 3 | Down?
+229.02 | Player 1 | Wow, ambiguous.
+231.96 | Player 4 | Yeah, down.
+232 | Player 3 | So, left.
+233.96 | Player 4 | Down?
+235.74 | Player 1 | That's right.
+235.96 | Player 4 | Right?
+237 | Player 3 | Down.
+240 | Player 3 | Right or...
+241.96 | Player 4 | Down or right?
+242 | Player 3 | I feel like that's right.
+244 | Player 3 | Right.
+245 | Player 3 | And then this is just up.
+246.18 | Player 1 | And then up.
+247 | Player 3 | Up.
+248 | Player 3 | Oh.
+249 | Player 3 | No.
+250.68 | Player 2 | But we're interpreting this one as up because the head is tilted back. If we're doing faces, it's facing this way. But then none of them are up, which is a little weird. Like none of them are. But everybody has two hands. Which hand is it?
+250.78 | Player 1 | So, we're interpreting this one as up
+254 | Player 3 | Yeah.
+254.58 | Player 1 | But then none of them are up, which is a little weird.
+256.66 | Player 1 | I feel like, would it be hands then?
+259 | Player 3 | But everybody has two hands.
+260.14 | Player 1 | That's true.
+260.96 | Player 4 | The direction the hand is pointing, like, this one is left, down, down.
+261.34 | Player 1 | Or the direction, the hands pointing.
+267.96 | Player 4 | Oh, wait, no.
+269.96 | Player 4 | Because, like, if you see the orientation, this one is definitely pointing this way,
+273.96 | Player 4 | and this one is definitely pointing the other way.
+275.96 | Player 4 | Oh, wait, no.
+278 | Player 3 | No.
+278.96 | Player 4 | Left, right, up, down.
+283.96 | Player 4 | This one is...
+285.96 | Player 4 | Where does this one go?
+287 | Player 3 | But you swapped hands.
+287.42 | Player 1 | But you've swapped hands.
+288.22 | Player 1 | Originally, you were using the right hands,
+290.74 | Player 1 | Oh, yeah.
+291.32 | Player 2 | Like it should either be all right hands, all left hands, or both.
+292 | Player 3 | True.
+293.7 | Player 1 | or right.
+293.96 | Player 4 | We're looking from this perspective.
+297 | Player 2 | Well, yeah, but they all have two hands, right? So like either it should be, if it is the hands, either it's six, it uses all the right hands. Six uses all the left hands, or it's 12, it uses everybody has two hands.
+299 | Player 3 | Right?
+300 | Player 3 | So, like, either it should be...
+301 | Player 3 | If it is the hands, either it's six, it uses all the right hands.
+306 | Player 3 | Everybody has two hands.
+307 | Player 3 | So, like, how many, like, directions does it take?
+311 | Player 3 | I feel like we're only looking at the people, like, is there nothing else on the...
+315 | Player 3 | There's, like, decorations.
+317.86 | Player 1 | Yeah.
+317.96 | Player 4 | I mean, later on, we could put keys in there.
+318.96 | Player 4 | I feel like there's a rip on every single one of the suits.
+319.96 | Player 4 | Okay.
+321.96 | Player 4 | No.
+323.62 | Player 1 | The cabinet in the back opens, but there's nothing in it.
+326.36 | Player 1 | Hmm.
+327 | Player 3 | I feel like it's just, like, decorative.
+328.96 | Player 4 | No.
+332 | Player 3 | I feel like there's a rip on every single one of the suits.
+335.96 | Player 4 | No.
+336 | Player 3 | No, not really.
+338 | Player 3 | Well, this would be, like, this one, this one.
+340.96 | Player 4 | Oh.
+341.96 | Player 4 | Oh, wait.
+343.96 | Player 4 | There's one back here.
+344.96 | Player 4 | Yeah.
+345 | Player 3 | And there's one right here.
+345.96 | Player 4 | Oh, yeah.
+346.26 | Player 1 | But there's also one right here.
+347 | Player 3 | Where?
+348.14 | Player 1 | Like, this guy has two.
+348.9 | Player 1 | Like, there's one right here, and there's one right here.
+349.96 | Player 4 | Right?
+350.66 | Player 1 | I feel like that's just a decoration.
+352 | Player 3 | Maybe.
+353.82 | Player 1 | Like, this guy has one here, and one here, and one here.
+357.96 | Player 4 | Maybe it's a general direction, I guess.
+358.02 | Player 1 | Maybe some general direction, I guess.
+361.1 | Player 1 | I was, yeah.
+363 | Player 3 | They're all in the back, though.
+366 | Player 3 | Is there one on the back of this one?
+368 | Player 3 | I can't see.
+368.46 | Player 1 | There's a rip right here on the side.
+375.82 | Player 1 | I was thinking.
+378 | Player 3 | Yeah.
+378.38 | Player 1 | Yeah, maybe.
+382.28 | Player 2 | it's either A, we were on the right track, but we're putting in the key wrong. Like for example,
+384.96 | Player 4 | Or maybe we do heads again.
+385 | Player 3 | Yeah.
+385.26 | Player 1 | Like, it means the heads.
+385.64 | Player 2 | let's say it is the heads, but we have one, like it could be the heads, but we have a direction
+386 | Player 3 | Well, maybe we do the heads again.
+386.26 | Player 1 | What do we mean, we do heads again?
+386.96 | Player 4 | Let's try the heads again.
+387.96 | Player 4 | It could be the heads a little bit wrong.
+388 | Player 3 | Like, it could be the heads, but we have a direction wrong.
+388.96 | Player 4 | Yeah, yeah.
+389.96 | Player 4 | Maybe just the heads, but let's change the last one
+391.96 | Player 4 | from up to down, because it's facing this way.
+395.5 | Player 1 | Or it's not the heads, and they're all laughing at us right now.
+399.42 | Player 1 | OK, so left.
+399.96 | Player 4 | So left, down, right.
+404.96 | Player 4 | Yeah, I feel like this is right.
+406.96 | Player 4 | This one's right.
+407.96 | Player 4 | That's right.
+408.82 | Player 1 | Right.
+409.96 | Player 4 | Down.
+411.96 | Player 4 | Right or down, guys, what about this one?
+413 | Player 3 | Down.
+417.1 | Player 1 | I feel like I need a piece of paper to write the previous one.
+420 | Player 3 | It's right.
+420.96 | Player 4 | Yeah, that's the thing.
+421 | Player 3 | Yeah.
+423.78 | Player 1 | Right, down.
+424 | Player 3 | We can try.
+426.14 | Player 1 | OK, no.
+429 | Player 3 | Try again, but try this one as down.
+431.82 | Player 1 | Yeah, so two down-y ends.
+431.96 | Player 4 | Yeah.
+432.96 | Player 4 | So two down at the end.
+433 | Player 3 | So two down again.
+433.7 | Player 1 | OK, left, and that one's down.
+435.96 | Player 4 | Left, down.
+437.58 | Player 1 | Down, right.
+439 | Player 3 | Right.
+441 | Player 3 | Wait, this one's right?
+441.96 | Player 4 | Oh, yeah, right, right, right.
+442.96 | Player 4 | Never mind.
+444.54 | Player 1 | Right, and then this one's down.
+448 | Player 3 | Down.
+449 | Player 3 | Can you take these out?
+449.9 | Player 1 | No.
+450.42 | Player 1 | They're really cool, yeah.
+452 | Player 3 | Yeah.
+453 | Player 3 | They come out.
+454 | Player 3 | Down.
+457 | Player 3 | Is there anything else we're missing?
+464.24 | Player 4 | Maybe it is the broken part?
+468.96 | Player 4 | Use the hands?
+469.96 | Player 4 | We can try right hand.
+473.96 | Player 4 | No, we don't.
+474 | Player 3 | No.
+474.96 | Player 4 | We're the AI chat bot.
+475 | Player 3 | OK.
+477.26 | Player 1 | Where's the AI chat bot?
+477.96 | Player 4 | I only speak to AI him.
+479 | Player 3 | I thought that was a good idea.
+480.96 | Player 4 | No, let's use our own intelligence.
+481 | Player 3 | No.
+482 | Player 3 | Let's use our own intelligence, all right?
+484.78 | Player 1 | Let's use AI.
+484.96 | Player 4 | Let's not let AI replace us.
+487.88 | Player 2 | direction, like this of the heads, right, like this is up, this is down, like where the head
+492.1 | Player 1 | Yeah.
+494.06 | Player 1 | Maybe it's that?
+495.96 | Player 4 | But these two have barely tilted face.
+498.96 | Player 4 | These two have barely tilted.
+499.96 | Player 4 | Yeah, I guess these guys are not that tilted either.
+500 | Player 3 | Yeah.
+501.96 | Player 4 | Yeah, that's the same.
+502.96 | Player 4 | We can try right hand.
+504.96 | Player 4 | This one is right.
+506 | Player 3 | Right?
+507 | Player 3 | That's the hand, actually.
+509.96 | Player 4 | From my perspective, it's the right.
+510 | Player 3 | That's the left hand?
+511 | Player 3 | Yeah.
+516.96 | Player 4 | It could be the feet.
+520.66 | Player 1 | The feet aren't pointed in the same guy.
+525.96 | Player 4 | Wait, what do you mean bisecting point?
+527.96 | Player 4 | What's a bisect?
+528.54 | Player 1 | I see.
+529.62 | Player 1 | Like, say it's like, well, actually, no, I don't know.
+531.96 | Player 4 | Left?
+532.96 | Player 4 | Nevermind.
+533.62 | Player 1 | Up, or down.
+533.96 | Player 4 | Right?
+535.96 | Player 4 | This looks like down to me.
+537.42 | Player 1 | Down.
+537.96 | Player 4 | Yeah, down, down.
+538.96 | Player 4 | And this one is definitely down.
+539.06 | Player 1 | This one's definitely down.
+541.96 | Player 4 | Down.
+543.06 | Player 1 | Right.
+544.42 | Player 1 | And right.
+545.96 | Player 4 | Down?
+546.96 | Player 4 | Right.
+547.96 | Player 4 | Down or right?
+548.96 | Player 4 | Try it twice.
+549.22 | Player 1 | I feel like it's more down.
+550.66 | Player 1 | Oh.
+550.96 | Player 4 | Down or right?
+551.96 | Player 4 | I feel like it's right.
+552.96 | Player 4 | Try right.
+558.18 | Player 1 | What about the chairs?
+559.96 | Player 4 | There's like...
+560.22 | Player 1 | There's three chairs.
+561.5 | Player 1 | There's only three chairs.
+562.98 | Player 1 | Yeah, but it could technically be a three.
+564.96 | Player 4 | Down.
+566.92 | Player 2 | But these two chairs are just like standing up. What, what is that?
+569.96 | Player 4 | Is there any things that we're missing?
+571.96 | Player 4 | We're just...
+572.96 | Player 4 | We were on the right track.
+573.96 | Player 4 | Stop laughing at us.
+577.42 | Player 1 | I feel very stupid.
+579.96 | Player 4 | Wait, are you a freshman?
+581.96 | Player 4 | You guys should do more job because you guys are like years older.
+585.82 | Player 1 | We're upper classes.
+586.62 | Player 1 | OK, I'll do the dunked up for hints.
+589.5 | Player 1 | We're sort of AI top bot.
+589.8 | Player 2 | Take responsibility.
+591.82 | Player 1 | We were inexperienced.
+591.96 | Player 4 | Me and Ania were both inexperienced as a college student, you know?
+595.96 | Player 4 | We had only been here for like what?
+597.96 | Player 4 | A few months?
+599.24 | Player 2 | Are we testing other puzzles in addition to this one or just this one?
+603.16 | Player 2 | Just this one? Okay. Okay, so we can spend a little more time on this before we ask for a hint.
+607.14 | Player 1 | Yeah.
+607.66 | Player 1 | What if there's the length of their shirts?
+610.78 | Player 1 | We only look at the long coat ones.
+612.6 | Player 2 | But what represents one? Like I feel like we only have a long shirt. What does that mean directionally?
+616.38 | Player 1 | I don't know.
+617.54 | Player 1 | I mean, like you.
+618.26 | Player 1 | Basically, this one, the long one.
+618.96 | Player 4 | this one is right.
+619.74 | Player 1 | Sorry.
+620.74 | Player 1 | Right.
+620.96 | Player 4 | But they're not going to face it the same way.
+621.48 | Player 2 | But they're kind of facing the same way. So like, like that's just the orientation of the body again,
+624.96 | Player 4 | True.
+626.96 | Player 4 | We're going to try orientation of the body again.
+628.96 | Player 4 | So right, left, I mean this is left, down, down, up, right, up.
+639.08 | Player 2 | Wouldn't these guys both be down because they're facing this way?
+641.96 | Player 4 | No, but this guy's facing this way, the up way.
+645.72 | Player 2 | But I thought the shirt is going this way. I thought you said, I thought you said you're
+647.96 | Player 4 | What do you mean?
+648.96 | Player 4 | I thought you said you were doing the shirts.
+650.96 | Player 4 | No, the way their body is tilting, this one is facing left.
+654.96 | Player 4 | This one is down.
+656.96 | Player 4 | Because it's facing this way.
+657.96 | Player 4 | Yeah, down.
+660.96 | Player 4 | But it's facing this way.
+661.96 | Player 4 | No, wait, what?
+663.96 | Player 4 | This is the front of the body.
+664.96 | Player 4 | Oh, wait, what?
+665.96 | Player 4 | I thought this was the back of the body.
+667.32 | Player 2 | This is the front of the body, right? I mean, the feet are pointing this way. Like,
+670.14 | Player 1 | I think this is the front of the body.
+671.94 | Player 1 | I mean, the feet are pointing this way.
+672.96 | Player 4 | Imagine if you were facing this way but my feet are like this.
+673.4 | Player 2 | imagine if you're facing this way, but my feet are like this, right? Like that's a little.
+675.96 | Player 4 | Okay, sure.
+679.96 | Player 4 | Yeah, down.
+680.96 | Player 4 | This part tricks me.
+683.96 | Player 4 | Never mind.
+688.96 | Player 4 | You know what?
+689.96 | Player 4 | Yeah, I could be like the dumb one here.
+691.96 | Player 4 | Okay, left, down, down, down, right, up.
+697.96 | Player 4 | What?
+698.94 | Player 1 | We've done this before.
+699.96 | Player 2 | Whereas the last one down is also facing this way, even if its head is tilted back.
+702.54 | Player 1 | even if it's head is tilted back.
+702.96 | Player 4 | Yeah, yeah, maybe.
+706.02 | Player 1 | It says down, down, down, right.
+708.26 | Player 1 | It has direction.
+709.7 | Player 1 | Down, like this.
+713.34 | Player 1 | OK, wait, that's good, actually.
+714.96 | Player 4 | Okay, wait, that's good actually.
+717.96 | Player 4 | Panic.
+718.96 | Player 4 | All of them look like they're in panic.
+721.96 | Player 4 | Why don't we try like the direction of...
+724.96 | Player 4 | The papers?
+726.96 | Player 4 | Okay.
+727.96 | Player 4 | Oh, yeah, yeah, yeah.
+730.96 | Player 4 | Up.
+732.96 | Player 4 | Yeah, yeah, sure.
+733.96 | Player 4 | I feel like this is right because it's like...
+735.82 | Player 1 | No, look, it's just looking like a title.
+735.96 | Player 4 | No, it doesn't mean left.
+736.96 | Player 4 | The title is in left.
+737.02 | Player 1 | Oh, I was thinking looking like a title.
+737.96 | Player 4 | Oh, the title.
+738.3 | Player 1 | OK, OK, OK, yeah.
+741.96 | Player 4 | Up.
+743.96 | Player 4 | Down?
+746.96 | Player 4 | It's technically up.
+747 | Player 2 | But I thought we said we're looking at the titles.
+747.96 | Player 4 | Like the title is just at the bottom.
+748.46 | Player 1 | No, where are the titles orientating?
+748.96 | Player 4 | Yeah.
+752.52 | Player 2 | Well, we can try multiple times. Yeah, we can try. Okay, okay, okay.
+752.62 | Player 1 | But we can try multiple times.
+753.9 | Player 1 | There's only three of them.
+753.96 | Player 4 | Yeah, yeah.
+755.02 | Player 1 | So this is down.
+757.5 | Player 1 | This one doesn't have anything on it.
+757.96 | Player 4 | It just...
+758.96 | Player 4 | Down?
+759.96 | Player 4 | Okay.
+760.7 | Player 1 | Down, OK.
+762.82 | Player 1 | No.
+762.96 | Player 4 | Like, talk secret panic because...
+765.58 | Player 1 | Wait, I wonder what top secret panic, because, OK,
+768.42 | Player 1 | these two are top secret panic, and this one
+768.96 | Player 4 | Because panic has direction.
+770.42 | Player 1 | says CMC Biotech Lab.
+772.86 | Player 1 | So like, those are two different things.
+772.96 | Player 4 | Like there's a panicked...
+775.08 | Player 2 | Does panic has direction? Are we supposed to be looking at one of them, maybe?
+778.52 | Player 2 | Panic. Maybe which... Like, there's a panicked zombie.
+782.06 | Player 1 | There's a panic topic.
+782.96 | Player 4 | Panic.
+788.96 | Player 4 | It has nothing on it.
+789.96 | Player 4 | It's just...
+792.96 | Player 4 | Human mutation.
+793.96 | Player 4 | Yeah.
+794.96 | Player 4 | That doesn't help.
+795.96 | Player 4 | Like, it also helps us to be mutated.
+796.9 | Player 1 | It also has to be mutated.
+799 | Player 2 | And disease. Okay, what does the other text on these say?
+801.96 | Player 4 | It's nothing.
+802.96 | Player 4 | Oh, it's just gibberish.
+803.96 | Player 4 | Yes.
+815.56 | Player 2 | Maybe we go in order from most panic to least panic.
+818.68 | Player 2 | Well, how do you define most panic? This guy, this guy looks most panic to me.
+818.96 | Player 4 | How do you define most panic to least panic?
+820.96 | Player 4 | Okay, most panic to me.
+822.96 | Player 4 | Okay, but like, what about the rest?
+823.98 | Player 1 | Oh, yeah.
+824.98 | Player 1 | One of the reds, one of the reds.
+825.96 | Player 4 | Most of them look equally panicked to me.
+829.96 | Player 4 | Well, maybe we should try it from this way to this way.
+832.84 | Player 2 | the other way around. Okay.
+832.96 | Player 4 | Maybe the other way around.
+833.96 | Player 4 | Yeah.
+834.46 | Player 1 | OK, so up or down.
+834.96 | Player 4 | Okay.
+837.96 | Player 4 | That's a good guess.
+838.96 | Player 4 | I'll say it, though.
+839.96 | Player 4 | Like, maybe the...
+840.82 | Player 1 | Maybe the, like, one of the ones that we don't know
+847.96 | Player 4 | there are.
+848.96 | Player 4 | Yeah.
+849.02 | Player 1 | There could technically be two, right?
+851.3 | Player 1 | I agree.
+853.96 | Player 4 | It's been 50 minutes.
+855.46 | Player 1 | Wow, we're struggling.
+857.5 | Player 1 | Up.
+861.54 | Player 1 | Right.
+862.2 | Player 2 | Maybe they're hiding little arrows underneath their lab coats.
+865.18 | Player 1 | I know.
+866.96 | Player 4 | Are you sure it's not looking for anything else?
+869.64 | Player 2 | I don't think we're sure.
+873.02 | Player 1 | Yeah.
+876.34 | Player 1 | This one's the only one without blood on its feet.
+878.58 | Player 1 | That doesn't help.
+878.96 | Player 4 | Wait, is there...
+879.48 | Player 2 | Oh, it's supposed to be on. It has this blue on the bottom, but it just kind of...
+879.9 | Player 1 | Is this the on?
+880.58 | Player 1 | It has blue on the bottom.
+882.04 | Player 2 | Okay. I don't think there's a possibility. You nudged it.
+882.62 | Player 1 | OK, I don't think there's a possibility you nudged it.
+884.78 | Player 1 | That's all I know.
+885.54 | Player 1 | Wait, what?
+887.96 | Player 4 | Wait, what?
+889.86 | Player 1 | So up.
+890.96 | Player 4 | Maybe only these have some sort of orientation.
+891.54 | Player 1 | Maybe the only guy that has, like, some type of orientation.
+893.96 | Player 4 | This is up and this is down.
+895.96 | Player 4 | And these are left, right, I feel like.
+898.04 | Player 2 | I feel like. Okay.
+899.64 | Player 2 | Okay. So like, it's like left, right, down, left, right, up.
+899.82 | Player 1 | OK.
+899.96 | Player 4 | So up, left, right, down, left, right, up.
+908.96 | Player 4 | Other way around.
+909.9 | Player 1 | Up, up, up.
+909.96 | Player 4 | Up, up.
+912.82 | Player 1 | No, no, up.
+916.94 | Player 1 | Four directions.
+919.1 | Player 1 | Only four combos.
+919.96 | Player 4 | Wait, wait, what are you...
+921.74 | Player 1 | So we're not even looking at those.
+924.76 | Player 2 | There's four papers. One of them doesn't have text on it.
+927.26 | Player 1 | Well, there's four long coat people, and there's two short.
+931.24 | Player 2 | Okay, maybe it's just the long coat guys. So left, down, right, up.
+932.94 | Player 1 | So it's the long coat guys.
+933.96 | Player 4 | Okay, left.
+934.14 | Player 1 | Left, left, down, right, up.
+938.78 | Player 1 | Oh, OK.
+941.02 | Player 1 | Oh.`;
 
 /* ──────────────────────────────────────────────────────────────────────
    PYTHON SOURCE  ·  the original notebook classes, verbatim
@@ -996,14 +1551,34 @@ slider.addEventListener('input', () => {
 });
 slider.addEventListener('change', buildAndRender);
 
-document.getElementById('runBtn').addEventListener('click', buildAndRender);
-document.getElementById('resetBtn').addEventListener('click', () => {
-  document.getElementById('transcriptInput').value = SAMPLE_TRANSCRIPT;
-  document.getElementById('windowSlider').value = 3;
-  slVal.textContent = '3.0';
+/* ──────────────────────────────────────────────────────────────────────
+   TRANSCRIPT SOURCE SWITCHER
+   ────────────────────────────────────────────────────────────────────── */
+const TRANSCRIPTS = { sample: SAMPLE_TRANSCRIPT, real: REAL_TRANSCRIPT };
+let currentSource = 'sample';
+
+function loadTranscript(srcKey) {
+  if (!TRANSCRIPTS[srcKey]) return;
+  currentSource = srcKey;
+  document.getElementById('transcriptInput').value = TRANSCRIPTS[srcKey];
+  document.querySelectorAll('.src-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.src === srcKey);
+  });
   buildAndRender();
+}
+
+document.querySelectorAll('.src-btn').forEach(btn => {
+  btn.addEventListener('click', () => loadTranscript(btn.dataset.src));
 });
 
+document.getElementById('runBtn').addEventListener('click', buildAndRender);
+document.getElementById('resetBtn').addEventListener('click', () => {
+  document.getElementById('windowSlider').value = 3;
+  slVal.textContent = '3.0';
+  loadTranscript(currentSource);
+});
+
+// Init
 document.getElementById('transcriptInput').value = SAMPLE_TRANSCRIPT;
 bootPyodide();
 </script>
