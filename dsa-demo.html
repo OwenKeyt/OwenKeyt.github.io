@@ -910,14 +910,16 @@ async function buildAndRender() {
     return;
   }
 
-  // Build nodes
+  // Build nodes — sqrt-based size so node radius stays sane across vastly
+  // different transcript lengths (linear scaling makes circles eat the canvas
+  // when out-degree gets into the hundreds).
   const nodes = [];
   for (const n of result.nodes) {
     const color = PLAYER_COLORS[n.id] || DEFAULT_COLOR;
     nodes.push({
       id: n.id,
       label: n.id,
-      size: 14 + n.activity * 0.6,
+      size: 14 + Math.sqrt(n.activity) * 2,
       color: { background: color, border: color, highlight: { background: color, border: '#fff' } },
       font: { color: '#e8ecf8', face: 'Space Grotesk', size: 16, strokeWidth: 0 },
       title: `Total Replies (out): ${n.activity}`,
