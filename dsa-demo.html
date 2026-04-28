@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conversation Graph · Owen Keyt</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+<!-- vis-network: same lib pyvis uses, so the visual feels native to the original notebook -->
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #05070e;
+    color: rgba(225, 230, 245, 0.85);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100%;
+    overflow-x: hidden;
+  }
+  body { padding: 60px 48px 100px; max-width: 1380px; margin: 0 auto; position: relative; }
+
+  /* ── ambient starfield (canvas) ─────────────────── */
+  #bgStars { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  .content { position: relative; z-index: 1; }
+
+  /* ── header ─────────────────────────────────────── */
+  .back-link {
+    display: inline-flex; align-items: center; gap: 10px;
+    color: rgba(200, 210, 240, 0.45);
+    text-decoration: none;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
+    padding: 9px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    transition: all 0.25s;
+    margin-bottom: 56px;
+  }
+  .back-link:hover { color: rgba(232, 236, 248, 0.92); border-color: rgba(127, 179, 245, 0.4); background: rgba(127, 179, 245, 0.04); }
+
+  .header { margin-bottom: 64px; max-width: 820px; }
+  .eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: #7fb3f5; opacity: 0.7;
+    margin-bottom: 18px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .eyebrow::before, .eyebrow::after {
+    content: ''; height: 1px; flex: 1; max-width: 40px;
+    background: linear-gradient(90deg, transparent, rgba(127, 179, 245, 0.4));
+  }
+  .eyebrow::before { background: linear-gradient(90deg, rgba(127, 179, 245, 0.4), transparent); }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: clamp(40px, 5vw, 64px);
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    color: rgba(232, 236, 248, 0.96);
+    margin-bottom: 22px;
+  }
+  h1 em {
+    font-style: normal;
+    background: linear-gradient(120deg, #7fb3f5, #a8e6cf);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .subtitle {
+    font-size: 16px; line-height: 1.75;
+    color: rgba(200, 215, 245, 0.6);
+    max-width: 720px;
+  }
+  .meta-tags {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 24px;
+  }
+  .meta-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px; letter-spacing: 0.08em;
+    padding: 5px 11px;
+    background: rgba(127, 179, 245, 0.07);
+    border: 1px solid rgba(127, 179, 245, 0.2);
+    color: #7fb3f5;
+    border-radius: 2px;
+  }
+
+  /* ── layout ─────────────────────────────────────── */
+  .layout { display: grid; grid-template-columns: 1fr 360px; gap: 28px; margin-bottom: 80px; }
+  @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: rgba(10, 13, 24, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    backdrop-filter: blur(12px);
+  }
+  .panel-header {
+    padding: 18px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .panel-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: rgba(200, 210, 240, 0.45);
+  }
+  .panel-body { padding: 22px 24px; }
+
+  /* ── network viz ────────────────────────────────── */
+  #network {
+    width: 100%; height: 560px;
+    background: rgba(8, 10, 22, 0.5);
+  }
+  .legend {
+    display: flex; gap: 22px; flex-wrap: wrap;
+    padding: 14px 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px; letter-spacing: 0.08em;
+    color: rgba(200, 210, 240, 0.55);
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-swatch {
+    width: 14px; height: 3px; border-radius: 1px;
+  }
+
+  /* ── controls ───────────────────────────────────── */
+  .control-group { margin-bottom: 24px; }
+  .control-group:last-child { margin-bottom: 0; }
+  .control-label {
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: rgba(200, 210, 240, 0.5);
+    margin-bottom: 10px;
+  }
+  .control-value { color: #a8e6cf; opacity: 0.85; font-weight: 700; }
+  input[type="range"] {
+    width: 100%; appearance: none; -webkit-appearance: none;
+    background: transparent; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 2px; background: rgba(127, 179, 245, 0.2); border-radius: 1px;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 2px; background: rgba(127, 179, 245, 0.2); border-radius: 1px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; margin-top: -6px;
+    background: #a8e6cf; border-radius: 50%;
+    box-shadow: 0 0 12px rgba(168, 230, 207, 0.5);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border: none;
+    background: #a8e6cf; border-radius: 50%;
+    box-shadow: 0 0 12px rgba(168, 230, 207, 0.5);
+  }
+  textarea {
+    width: 100%; min-height: 220px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    color: rgba(225, 230, 245, 0.85);
+    padding: 12px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; line-height: 1.6;
+    border-radius: 3px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: rgba(127, 179, 245, 0.4); }
+  .btn {
+    width: 100%;
+    padding: 12px 18px;
+    background: linear-gradient(135deg, rgba(127, 179, 245, 0.12), rgba(168, 230, 207, 0.12));
+    border: 1px solid rgba(127, 179, 245, 0.35);
+    color: rgba(232, 236, 248, 0.92);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 500;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.2s;
+  }
+  .btn:hover { border-color: rgba(127, 179, 245, 0.7); background: linear-gradient(135deg, rgba(127, 179, 245, 0.2), rgba(168, 230, 207, 0.2)); }
+  .btn:active { transform: translateY(1px); }
+  .btn-secondary {
+    margin-top: 8px;
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(200, 210, 240, 0.55);
+  }
+  .btn-secondary:hover { color: rgba(232, 236, 248, 0.92); border-color: rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.03); }
+
+  /* ── role cards ─────────────────────────────────── */
+  .roles-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+  }
+  .role-card {
+    padding: 18px 20px;
+    background: rgba(10, 13, 24, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    border-left: 3px solid var(--player-color, #888);
+    backdrop-filter: blur(8px);
+  }
+  .role-card-name {
+    display: flex; align-items: center; gap: 9px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600; font-size: 14px;
+    color: rgba(232, 236, 248, 0.92);
+    margin-bottom: 4px;
+  }
+  .role-card-name::before {
+    content: ''; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--player-color, #888);
+    box-shadow: 0 0 10px var(--player-color, #888);
+  }
+  .role-card-role {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--player-color, #888);
+    opacity: 0.8;
+    margin-bottom: 14px;
+  }
+  .role-card-stats {
+    display: flex; gap: 18px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: rgba(200, 210, 240, 0.55);
+  }
+  .role-card-stats span strong { color: rgba(232, 236, 248, 0.85); font-weight: 700; }
+
+  /* ── algorithm explainer ───────────────────────── */
+  .explainer { margin-top: 80px; max-width: 940px; }
+  .explainer h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600; font-size: 28px;
+    letter-spacing: -0.015em;
+    color: rgba(232, 236, 248, 0.92);
+    margin-bottom: 32px;
+  }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+  .step {
+    padding: 24px 22px;
+    background: rgba(10, 13, 24, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+  }
+  .step-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; letter-spacing: 0.18em;
+    color: #7fb3f5; opacity: 0.7;
+    margin-bottom: 12px;
+  }
+  .step h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600; font-size: 16px;
+    color: rgba(232, 236, 248, 0.92);
+    margin-bottom: 10px;
+  }
+  .step p {
+    font-size: 13px; line-height: 1.7;
+    color: rgba(200, 215, 245, 0.55);
+  }
+  code {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.9em;
+    color: #a8e6cf;
+    background: rgba(168, 230, 207, 0.06);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  .footnote {
+    margin-top: 60px;
+    padding-top: 28px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 12px;
+    color: rgba(200, 210, 240, 0.4);
+    line-height: 1.7;
+  }
+  .footnote a { color: #7fb3f5; opacity: 0.8; text-decoration: none; }
+  .footnote a:hover { opacity: 1; text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<canvas id="bgStars"></canvas>
+
+<div class="content">
+  <a href="index.html" class="back-link">← Star Map</a>
+
+  <header class="header">
+    <div class="eyebrow">Final Project · DSA · 2025</div>
+    <h1><em>Conversation Graph:</em><br>Inferring Communication Roles from Sentiment-Weighted Interactions</h1>
+    <p class="subtitle">
+      A custom doubly-linked-list sliding temporal window pairs with a directed weighted graph
+      to model team communication from a transcript. Each utterance is scored with a VADER-style
+      sentiment lexicon, edges inherit the average sentiment of the interactions they represent,
+      and each speaker's role is inferred from in- and out-degree.
+    </p>
+    <div class="meta-tags">
+      <span class="meta-tag">Doubly Linked List</span>
+      <span class="meta-tag">Directed Graph</span>
+      <span class="meta-tag">Sliding Window O(1)</span>
+      <span class="meta-tag">VADER Sentiment</span>
+      <span class="meta-tag">Group Project</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- Visualization panel -->
+    <section class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Interaction Network</span>
+        <span class="panel-title" id="netStats" style="opacity:0.7"></span>
+      </div>
+      <div id="network"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-swatch" style="background:#44BB44"></span>Positive · sentiment > 0.3</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#888888"></span>Neutral · −0.3 to 0.3</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#FF4444"></span>Negative · sentiment < −0.3</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:rgba(255,255,255,0.4)"></span>Edge thickness = interaction count</div>
+      </div>
+    </section>
+
+    <!-- Controls panel -->
+    <aside class="panel">
+      <div class="panel-header"><span class="panel-title">Controls</span></div>
+      <div class="panel-body">
+        <div class="control-group">
+          <div class="control-label">
+            <span>Temporal Window</span>
+            <span class="control-value"><span id="windowVal">3.0</span>s</span>
+          </div>
+          <input type="range" id="windowSlider" min="1" max="12" step="0.5" value="3">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label"><span>Transcript</span></div>
+          <textarea id="transcriptInput" spellcheck="false"></textarea>
+        </div>
+
+        <div class="control-group">
+          <button class="btn" id="runBtn">Rebuild Graph</button>
+          <button class="btn btn-secondary" id="resetBtn">Reset to Sample</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Role cards -->
+  <section>
+    <div class="panel-header" style="border-bottom:none; padding:0 0 18px;">
+      <span class="panel-title">Inferred Roles</span>
+      <span class="panel-title" style="opacity:0.55;">out-deg ≥ 6 + in-deg ≥ 4 → Leader · out-deg ≥ 6, in &lt; 4 → Active · in ≥ 6, out &lt; 4 → Frequently Addressed</span>
+    </div>
+    <div class="roles-grid" id="rolesGrid"></div>
+  </section>
+
+  <!-- Explainer -->
+  <section class="explainer">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01 · WINDOW</div>
+        <h3>Sliding Temporal Window</h3>
+        <p>
+          A doubly-linked list keeps every utterance from the last <code>w</code> seconds. As the transcript
+          advances, old events are popped from the head in <code>O(1)</code> and new ones appended at the tail.
+          The list is the conversational "short-term memory" — anyone still in it is considered an addressable
+          peer.
+        </p>
+      </div>
+      <div class="step">
+        <div class="step-num">02 · GRAPH</div>
+        <h3>Directed Weighted Graph</h3>
+        <p>
+          Each new utterance creates a directed edge from the speaker to every other speaker still inside the
+          window. Repeat interactions accumulate weight on the edge. Self-loops are dropped — speaking doesn't
+          count as addressing yourself.
+        </p>
+      </div>
+      <div class="step">
+        <div class="step-num">03 · SENTIMENT</div>
+        <h3>VADER-style Scoring</h3>
+        <p>
+          Every utterance gets a compound sentiment score from a curated valence lexicon (with negation,
+          punctuation, and capitalization handling). Each edge stores the running average of its underlying
+          interactions; that average drives the edge color in the visualization.
+        </p>
+      </div>
+      <div class="step">
+        <div class="step-num">04 · ROLES</div>
+        <h3>Role Classification</h3>
+        <p>
+          Once the graph is built, each speaker's <code>in-degree</code> and <code>out-degree</code> are
+          summed across all edges. Simple thresholds map the (in, out) pair to a role:
+          <em>Leader / Coordinator</em>, <em>Active Speaker</em>, <em>Frequently Addressed</em>, or
+          <em>Observer</em>.
+        </p>
+      </div>
+    </div>
+
+    <div class="footnote">
+      Demo is a faithful in-browser port of the Python notebook (course: Data Structures &amp; Algorithms).
+      Visualization uses <a href="https://visjs.github.io/vis-network/docs/network/" target="_blank" rel="noopener">vis-network</a>
+      — the same library <code>pyvis</code> wraps under the hood — so the look mirrors the notebook output.
+      Sentiment is approximated with an embedded VADER-style lexicon so the page is fully self-contained;
+      the original notebook uses NLTK's full VADER analyzer.
+    </div>
+  </section>
+</div>
+
+<script>
+/* ──────────────────────────────────────────────────────────────────────
+   AMBIENT STARFIELD
+   ────────────────────────────────────────────────────────────────────── */
+(function starfield() {
+  const c = document.getElementById('bgStars');
+  const ctx = c.getContext('2d');
+  let W, H, raf;
+  const stars = Array.from({ length: 220 }, () => ({
+    x: Math.random(), y: Math.random(),
+    r: Math.random() * 1.0 + 0.15,
+    phase: Math.random() * Math.PI * 2,
+    speed: Math.random() * 0.005 + 0.002,
+  }));
+  const resize = () => { W = c.width = innerWidth; H = c.height = innerHeight; };
+  resize(); addEventListener('resize', resize);
+  const draw = (t) => {
+    ctx.clearRect(0, 0, W, H);
+    for (const s of stars) {
+      const op = 0.08 + 0.18 * Math.sin(t * 0.001 * s.speed * 800 + s.phase);
+      ctx.beginPath();
+      ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(180, 200, 240, ${op})`;
+      ctx.fill();
+    }
+    raf = requestAnimationFrame(draw);
+  };
+  raf = requestAnimationFrame(draw);
+})();
+
+/* ──────────────────────────────────────────────────────────────────────
+   VADER-STYLE SENTIMENT LEXICON  (embedded subset of ~250 high-impact
+   words from the public VADER lexicon, sufficient for conversational
+   text. Original NLTK VADER lexicon: github.com/cjhutto/vaderSentiment)
+   ────────────────────────────────────────────────────────────────────── */
+const LEXICON = {
+  // strong positive
+  "love":3.2,"loved":3.2,"loves":3.2,"loving":2.6,"lovely":2.8,"awesome":3.1,"amazing":2.8,
+  "excellent":2.7,"perfect":2.7,"fantastic":2.6,"brilliant":2.5,"wonderful":2.7,"great":3.1,
+  "outstanding":2.6,"superb":3.0,"terrific":3.0,"yes":1.7,"yeah":1.4,"yay":2.6,
+  // positive
+  "good":1.9,"nice":1.8,"happy":2.7,"glad":2.0,"pleased":1.7,"smart":1.9,"cool":1.3,
+  "fun":1.9,"clear":0.9,"easy":1.2,"safe":1.1,"win":2.1,"won":2.1,"winning":2.0,
+  "succeed":2.5,"success":2.6,"successful":2.4,"correct":1.9,"right":1.4,"works":1.4,
+  "working":0.7,"solved":2.2,"solve":2.0,"solving":1.5,"got":0.5,"yes!":2.4,"finally":1.0,
+  "found":1.4,"find":0.8,"finds":0.7,"helpful":1.9,"helped":1.5,"thanks":1.7,"thank":1.5,
+  "ok":0.7,"okay":0.7,"sure":1.2,"trust":2.3,"agreed":1.7,"agree":1.4,"like":1.5,
+  "liked":1.5,"likes":1.5,"good!":2.5,"yes!":2.4,"clever":2.2,"genius":2.4,"lucky":1.6,
+  "calm":1.7,"safe":1.7,"hope":1.9,"hopes":1.7,"hopeful":1.8,"better":1.9,
+  // mild positive
+  "ah":0.6,"oh":0.0,"hm":0.0,"interesting":1.0,"makes sense":1.5,
+  // negative
+  "bad":-2.5,"awful":-2.5,"terrible":-3.4,"horrible":-3.0,"worst":-3.1,"worse":-2.5,
+  "hate":-2.7,"hated":-2.7,"hates":-2.7,"hating":-2.6,"angry":-2.7,"mad":-1.8,
+  "frustrated":-2.4,"frustrating":-2.4,"annoying":-2.0,"annoyed":-1.9,"stressed":-1.6,
+  "wrong":-2.1,"failed":-2.5,"fail":-2.5,"failing":-2.3,"failure":-2.7,"broken":-2.0,
+  "broke":-1.5,"stuck":-1.7,"hard":-0.4,"difficult":-1.6,"impossible":-1.9,
+  "no":-1.2,"not":-0.7,"never":-1.2,"can't":-0.8,"won't":-0.8,"don't":-0.4,
+  "stupid":-2.4,"dumb":-2.0,"useless":-2.7,"pointless":-2.0,"boring":-1.7,
+  "tired":-1.4,"sick":-1.7,"hurts":-1.6,"hurt":-1.6,"pain":-2.4,
+  "scared":-1.8,"afraid":-2.0,"worried":-1.7,"worry":-1.6,"confused":-1.4,
+  "lost":-1.6,"missing":-1.0,"missed":-1.1,"mistake":-1.5,"mistakes":-1.6,
+  "trouble":-1.8,"problem":-1.4,"problems":-1.4,"issue":-0.9,"issues":-1.0,
+  "ugh":-1.6,"crap":-1.7,"damn":-1.6,"shoot":-0.6,"oops":-0.8,
+  "ridiculous":-1.7,"disappointed":-2.1,"disappointing":-2.0,
+  // exploration / state
+  "panic":-2.4,"nervous":-1.5,"nope":-1.2,"hopeless":-2.3,"give up":-2.1,
+};
+const NEGATIONS = new Set(["not","no","never","none","neither","nor","cannot","can't","won't","wouldn't","shouldn't","couldn't","don't","doesn't","didn't","isn't","aren't","wasn't","weren't","ain't"]);
+const BOOSTERS = {
+  "very":0.293,"really":0.293,"so":0.2,"super":0.293,"extremely":0.293,
+  "absolutely":0.293,"completely":0.293,"totally":0.293,"definitely":0.2,
+  "kind of":-0.293,"kinda":-0.293,"sort of":-0.293,"slightly":-0.293,"somewhat":-0.293,
+  "barely":-0.293,"hardly":-0.293,
+};
+
+function vaderCompound(text) {
+  if (!text || typeof text !== 'string') return 0;
+  const raw = text.trim();
+  if (!raw) return 0;
+  // Track ALLCAPS amplification (VADER does this when the whole utterance
+  // isn't all caps but some words are).
+  const words = raw.match(/[A-Za-z']+|[!?]/g) || [];
+  const lower = words.map(w => w.toLowerCase());
+  // Are any words ALLCAPS while at least one isn't?
+  const hasAllCaps = words.some(w => w.length > 1 && w === w.toUpperCase() && /[A-Z]/.test(w));
+  const isAllCaps = words.every(w => w === w.toUpperCase());
+  const capAmp = (hasAllCaps && !isAllCaps) ? 0.733 : 0;
+
+  let valences = [];
+  for (let i = 0; i < lower.length; i++) {
+    const w = lower[i];
+    if (!(w in LEXICON)) continue;
+    let v = LEXICON[w];
+    // ALLCAPS bump for this individual word
+    if (words[i].length > 1 && words[i] === words[i].toUpperCase() && /[A-Z]/.test(words[i]) && !isAllCaps) {
+      v += v > 0 ? 0.733 : -0.733;
+    }
+    // Boosters (one and two-back)
+    for (let back = 1; back <= 2; back++) {
+      if (i - back < 0) break;
+      const prev = lower[i - back];
+      if (prev in BOOSTERS) {
+        let bump = BOOSTERS[prev];
+        if (back === 2) bump *= 0.95;
+        if (v > 0) v += bump; else v -= bump;
+      }
+    }
+    // Negation lookback (3 words)
+    for (let back = 1; back <= 3; back++) {
+      if (i - back < 0) break;
+      if (NEGATIONS.has(lower[i - back])) { v *= -0.74; break; }
+    }
+    valences.push(v);
+  }
+
+  // Punctuation amp
+  const exclam = (raw.match(/!/g) || []).length;
+  const quest = (raw.match(/\?/g) || []).length;
+  const punctAmp = Math.min(exclam, 4) * 0.292 + (quest >= 2 ? Math.min(quest, 4) * 0.18 : 0);
+
+  let sumV = valences.reduce((a, b) => a + b, 0);
+  if (sumV > 0) sumV += punctAmp; else if (sumV < 0) sumV -= punctAmp;
+
+  // Normalize like VADER
+  const ALPHA = 15;
+  const compound = sumV / Math.sqrt(sumV * sumV + ALPHA);
+  return Math.max(-1, Math.min(1, compound));
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   PORTED CLASSES (DLLNode, TemporalWindowList, InteractionGraph)
+   ────────────────────────────────────────────────────────────────────── */
+class DLLNode {
+  constructor(time, speaker, sentiment) {
+    this.time = time; this.speaker = speaker; this.sentiment = sentiment;
+    this.next = null; this.prev = null;
+  }
+}
+
+class TemporalWindowList {
+  constructor(windowSeconds = 5.0) {
+    this.head = null; this.tail = null; this.windowSeconds = windowSeconds;
+  }
+  append(time, speaker, sentiment) {
+    const node = new DLLNode(time, speaker, sentiment);
+    if (!this.tail) { this.head = this.tail = node; }
+    else { this.tail.next = node; node.prev = this.tail; this.tail = node; }
+  }
+  removeOldEvents(currentTime) {
+    while (this.head && (currentTime - this.head.time) > this.windowSeconds) {
+      this.head = this.head.next;
+      if (this.head) this.head.prev = null;
+      else this.tail = null;
+    }
+  }
+  getRecentSpeakers() {
+    const out = [];
+    let cur = this.head;
+    while (cur) { out.push(cur.speaker); cur = cur.next; }
+    return out;
+  }
+}
+
+class InteractionGraph {
+  constructor() { this.vertices = {}; this.sentiments = {}; }
+  addInteraction(speaker, addressee, sentiment = 0) {
+    if (speaker === addressee) return;
+    if (!this.vertices[speaker]) this.vertices[speaker] = {};
+    if (!this.vertices[addressee]) this.vertices[addressee] = {};
+    if (!(addressee in this.vertices[speaker])) this.vertices[speaker][addressee] = 0;
+    this.vertices[speaker][addressee] += 1;
+    const k = speaker + "→" + addressee;
+    if (!this.sentiments[k]) this.sentiments[k] = [];
+    this.sentiments[k].push(sentiment);
+  }
+  getAvgSentiment(speaker, addressee) {
+    const k = speaker + "→" + addressee;
+    const arr = this.sentiments[k];
+    if (!arr || arr.length === 0) return 0;
+    return arr.reduce((a, b) => a + b, 0) / arr.length;
+  }
+  getOutDegree(player) {
+    const v = this.vertices[player];
+    if (!v) return 0;
+    return Object.values(v).reduce((a, b) => a + b, 0);
+  }
+  getInDegree(player) {
+    let total = 0;
+    for (const sp in this.vertices) {
+      total += this.vertices[sp][player] || 0;
+    }
+    return total;
+  }
+}
+
+function classifyRole(graph, player) {
+  const out = graph.getOutDegree(player);
+  const inn = graph.getInDegree(player);
+  if (out >= 6 && inn >= 4) return "Leader / Coordinator";
+  if (out >= 6 && inn < 4)  return "Active Speaker";
+  if (inn >= 6 && out < 4)  return "Frequently Addressed";
+  return "Observer";
+}
+
+function edgeColor(s) {
+  if (s < -0.3) return "#FF4444";
+  if (s >  0.3) return "#44BB44";
+  return "#888888";
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   SAMPLE TRANSCRIPT (escape room scenario, 4 players, ~50 utterances)
+   Format: time(seconds) | speaker | text
+   ────────────────────────────────────────────────────────────────────── */
+const SAMPLE_TRANSCRIPT = `2.0 | Player 1 | OK team, door just locked. We have sixty minutes.
+3.5 | Player 1 | Player 3, check the bookshelf. Player 2, the desk.
+5.0 | Player 2 | On the desk now. Searching the drawers.
+6.5 | Player 1 | Anything yet Player 2?
+7.5 | Player 2 | Found a flashlight! Nice.
+9.0 | Player 1 | Awesome. Player 3, what about the books?
+10.5 | Player 3 | Books have symbols. Triangle, circle, square.
+12.0 | Player 1 | Great work. Write that down.
+13.5 | Player 2 | I see a locked box in the drawer.
+15.0 | Player 1 | Player 2, look for a key around the room.
+16.5 | Player 2 | Searching... checking under the rug.
+18.0 | Player 1 | Anyone got a key yet?
+19.5 | Player 2 | Found one under the rug!
+21.0 | Player 1 | Brilliant! Try it on the box.
+22.5 | Player 2 | Trying... it works! Empty though.
+24.0 | Player 1 | Hmm. Look closer Player 2, false bottom maybe?
+25.5 | Player 2 | Yes! There's a slip of paper under it.
+27.0 | Player 1 | What does it say?
+28.5 | Player 2 | Numbers: 7, 4, 1, 2.
+36.0 | Player 4 | Sorry I'm late. What did I miss?
+44.0 | Player 1 | Player 3, the bookshelf — anything else?
+46.0 | Player 3 | A second row. Same symbols, different order.
+48.0 | Player 1 | Read me the order Player 3.
+50.0 | Player 3 | Circle, triangle, square this time.
+52.0 | Player 1 | Combine that with the numbers Player 2 found.
+54.0 | Player 1 | Player 2, try 7412 on the wall safe.
+56.0 | Player 2 | Trying it now... opened! Awesome!
+58.0 | Player 1 | Excellent team! What's inside?
+60.0 | Player 2 | A key and a card. Card says "exit panel."
+62.0 | Player 1 | Player 3, find the exit panel.
+70.0 | Player 4 | I think I see it by the door.
+78.0 | Player 1 | Player 3, try the key there.
+80.0 | Player 3 | Trying... it's working! Door is open!
+81.5 | Player 1 | YES! Brilliant work everyone.
+83.0 | Player 2 | Nice teamwork!
+95.0 | Player 4 | Cool, glad we made it.`;
+
+/* ──────────────────────────────────────────────────────────────────────
+   PARSER  ·  GRAPH BUILD  ·  RENDER
+   ────────────────────────────────────────────────────────────────────── */
+function parseTranscript(text) {
+  const rows = [];
+  const lines = text.split(/\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split('|').map(s => s.trim());
+    if (parts.length < 3) continue;
+    const t = parseFloat(parts[0]);
+    if (isNaN(t)) continue;
+    rows.push({ time: t, speaker: parts[1], text: parts.slice(2).join('|') });
+  }
+  rows.sort((a, b) => a.time - b.time);
+  return rows;
+}
+
+const PLAYER_COLORS = {
+  "Player 1": "#FF8C42",
+  "Player 2": "#43AA8B",
+  "Player 3": "#4A90E2",
+  "Player 4": "#AF7AC5",
+};
+const DEFAULT_COLOR = "#E5E5E5";
+
+let networkInstance = null;
+
+function buildAndRender() {
+  const rawTranscript = document.getElementById('transcriptInput').value;
+  const windowSeconds = parseFloat(document.getElementById('windowSlider').value);
+  const rows = parseTranscript(rawTranscript);
+  if (rows.length === 0) {
+    document.getElementById('netStats').textContent = "No valid rows parsed";
+    return;
+  }
+
+  const win = new TemporalWindowList(windowSeconds);
+  const graph = new InteractionGraph();
+
+  for (const row of rows) {
+    if (!row.text || !row.speaker || row.speaker === 'Unknown') continue;
+    win.removeOldEvents(row.time);
+    const recent = win.getRecentSpeakers();
+    const sentiment = vaderCompound(row.text);
+    for (const prev of recent) {
+      graph.addInteraction(row.speaker, prev, sentiment);
+    }
+    win.append(row.time, row.speaker, sentiment);
+  }
+
+  // Build vis-network nodes/edges
+  const nodes = [];
+  const players = Object.keys(graph.vertices);
+  for (const p of players) {
+    const activity = graph.getOutDegree(p);
+    const color = PLAYER_COLORS[p] || DEFAULT_COLOR;
+    nodes.push({
+      id: p,
+      label: p,
+      size: 14 + activity * 0.6,
+      color: { background: color, border: color, highlight: { background: color, border: '#fff' } },
+      font: { color: '#e8ecf8', face: 'Space Grotesk', size: 16, strokeWidth: 0 },
+      title: `Total Replies (out): ${activity}`,
+    });
+  }
+
+  const edges = [];
+  for (const sp in graph.vertices) {
+    for (const ad in graph.vertices[sp]) {
+      const w = graph.vertices[sp][ad];
+      if (w <= 0) continue;
+      const avg = graph.getAvgSentiment(sp, ad);
+      edges.push({
+        from: sp, to: ad,
+        value: w,
+        title: `${sp} → ${ad}: ${w} interactions · avg sentiment ${avg.toFixed(2)}`,
+        color: { color: edgeColor(avg), highlight: edgeColor(avg) },
+        arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+        smooth: { type: 'curvedCW', roundness: 0.18 },
+      });
+    }
+  }
+
+  const container = document.getElementById('network');
+  if (networkInstance) networkInstance.destroy();
+  networkInstance = new vis.Network(container,
+    { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) },
+    {
+      physics: {
+        forceAtlas2Based: {
+          gravitationalConstant: -50, centralGravity: 0.012,
+          springLength: 200, springConstant: 0.05,
+        },
+        solver: 'forceAtlas2Based', stabilization: { iterations: 220 },
+      },
+      interaction: { hover: true, tooltipDelay: 120 },
+      edges: { smooth: { enabled: true, type: 'curvedCW', roundness: 0.18 }, scaling: { min: 1, max: 8 } },
+    }
+  );
+
+  // Render role cards
+  const grid = document.getElementById('rolesGrid');
+  grid.innerHTML = '';
+  const sorted = players.slice().sort();
+  for (const p of sorted) {
+    const out = graph.getOutDegree(p);
+    const inn = graph.getInDegree(p);
+    const role = classifyRole(graph, p);
+    const color = PLAYER_COLORS[p] || DEFAULT_COLOR;
+    const card = document.createElement('div');
+    card.className = 'role-card';
+    card.style.setProperty('--player-color', color);
+    card.innerHTML = `
+      <div class="role-card-name">${p}</div>
+      <div class="role-card-role">${role}</div>
+      <div class="role-card-stats">
+        <span><strong>${out}</strong> out</span>
+        <span><strong>${inn}</strong> in</span>
+        <span><strong>${(out + inn) ? ((out / (out + inn)) * 100).toFixed(0) : 0}%</strong> initiating</span>
+      </div>
+    `;
+    grid.appendChild(card);
+  }
+
+  // Header stats
+  const totalEdges = edges.length;
+  const totalInteractions = edges.reduce((a, e) => a + e.value, 0);
+  document.getElementById('netStats').textContent =
+    `${players.length} speakers · ${totalEdges} edges · ${totalInteractions} interactions · ${rows.length} utterances`;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   WIRE UP UI
+   ────────────────────────────────────────────────────────────────────── */
+const slider = document.getElementById('windowSlider');
+const slVal = document.getElementById('windowVal');
+slider.addEventListener('input', () => {
+  slVal.textContent = parseFloat(slider.value).toFixed(1);
+});
+slider.addEventListener('change', buildAndRender);
+
+document.getElementById('runBtn').addEventListener('click', buildAndRender);
+document.getElementById('resetBtn').addEventListener('click', () => {
+  document.getElementById('transcriptInput').value = SAMPLE_TRANSCRIPT;
+  document.getElementById('windowSlider').value = 3;
+  slVal.textContent = '3.0';
+  buildAndRender();
+});
+
+// init
+document.getElementById('transcriptInput').value = SAMPLE_TRANSCRIPT;
+buildAndRender();
+</script>
+</body>
+</html>
